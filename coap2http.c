@@ -58,7 +58,7 @@ typedef struct Request_s
 } Request_t;
 
 static bool LoadMessage(char *file, Request_t *request);
-static bool ParseRequest(Request_t *request);
+static bool ParseCoapMessage(Request_t *request);
 
 /*
  * End of declarations
@@ -76,7 +76,7 @@ int main(int argc, char *argv[])
         exit(-1);
     }
     if (LoadMessage(argv[1], &request) == NS_TRUE) {
-        fprintf(stderr, "Result: %d\n", ParseRequest(&request));
+        fprintf(stderr, "Result: %d\n", ParseCoapMessage(&request));
     }
 
     return 0;
@@ -119,7 +119,7 @@ static bool CheckRemainingSize(Request_t *request, int increment)
 /*
  * Parse the content of a CoAP request
  */
-static bool ParseRequest(Request_t *request) {
+static bool ParseCoapMessage(Request_t *request) {
     Option_t option;
     int      i, codeValue, lastOptionNumber = 0;
     bool     processOptions;
