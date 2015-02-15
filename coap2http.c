@@ -37,9 +37,9 @@ typedef struct Option_s
 } Option_t;
 
 /*
- * Holds the request and its parameters
+ * Holds the CoAP message and its parameters
  */
-typedef struct Request_s
+typedef struct CoapMsg_s
 {
     byte        raw[MAX_SIZE];  /* holds the raw packet */
     int         size;           /* size in bytes */
@@ -55,10 +55,10 @@ typedef struct Request_s
     int         payloadLength;  /* length of payload */
     int         optionCount;    /* number of valid options */
     Option_t    options[MAX_SIZE - 4];
-} Request_t;
+} CoapMsg_t;
 
-static bool LoadMessage(char *file, Request_t *request);
-static bool ParseCoapMessage(Request_t *request);
+static bool LoadMessage(char *file, CoapMsg_t *request);
+static bool ParseCoapMessage(CoapMsg_t *request);
 
 /*
  * End of declarations
@@ -66,9 +66,9 @@ static bool ParseCoapMessage(Request_t *request);
 
 int main(int argc, char *argv[])
 {
-    Request_t request;
+    CoapMsg_t request;
 
-    bzero(&request, sizeof(Request_t));
+    bzero(&request, sizeof(CoapMsg_t));
     request.valid = NS_TRUE;
 
     if (argc != 2) {
@@ -85,7 +85,7 @@ int main(int argc, char *argv[])
 /*
  * Load message from file and save it to buffer together with its size
  */
-static bool LoadMessage(char *file, Request_t *request)
+static bool LoadMessage(char *file, CoapMsg_t *request)
 {
     FILE *fd;
     bool success = NS_TRUE;
@@ -104,7 +104,7 @@ static bool LoadMessage(char *file, Request_t *request)
 /*
  * Check size of the CoAP message
  */
-static bool CheckRemainingSize(Request_t *request, int increment)
+static bool CheckRemainingSize(CoapMsg_t *request, int increment)
 {
     bool success = NS_TRUE;
 
@@ -119,7 +119,7 @@ static bool CheckRemainingSize(Request_t *request, int increment)
 /*
  * Parse the content of a CoAP request
  */
-static bool ParseCoapMessage(Request_t *request) {
+static bool ParseCoapMessage(CoapMsg_t *request) {
     Option_t option;
     int      i, codeValue, lastOptionNumber = 0;
     bool     processOptions;
