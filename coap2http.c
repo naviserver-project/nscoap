@@ -76,7 +76,7 @@ int main(int argc, char *argv[])
         exit(-1);
     }
     if (LoadMessage(argv[1], &request) == NS_TRUE) {
-        printf("Result: %d\n", ParseRequest(&request));
+        fprintf(stderr, "Result: %d\n", ParseRequest(&request));
     }
 
     return 0;
@@ -139,14 +139,14 @@ static bool ParseRequest(Request_t *request) {
     request->valid = NS_TRUE;
 
 #ifdef DEBUG
-    printf("parseRequest started.\n");
+    fprintf(stderr, "parseRequest started.\n");
 #endif
     /*
      * CoAP messages can't be shorter than 4 bytes
      */
     if (CheckRemainingSize(request, 4) == NS_FALSE) {
 #ifdef DEBUG
-        printf("Message shorter than 4 bytes.\n");
+        fprintf(stderr, "Message shorter than 4 bytes.\n");
 #endif
         return NS_FALSE;
     }
@@ -191,7 +191,7 @@ static bool ParseRequest(Request_t *request) {
     code.detail = (request->raw[1] & 0x1fu);
     codeValue   = code.class * 100 + code.detail;
 #ifdef DEBUG
-    printf("Message code: %d\n", codeValue);
+    fprintf(stderr, "Message code: %d\n", codeValue);
 #endif
 
     /*
@@ -253,7 +253,7 @@ static bool ParseRequest(Request_t *request) {
         option.length = (request->raw[request->position] & 0x0fu);
         request->position++;
 #ifdef DEBUG
-        printf("Processing option: number delta = %u, length = %u.\n",
+        fprintf(stderr, "Processing option: number delta = %u, length = %u.\n",
                option.delta, option.length);
 #endif
         /*
@@ -367,12 +367,12 @@ static bool ParseRequest(Request_t *request) {
             request->options[request->optionCount] = option;
             request->optionCount++;
 #ifdef DEBUG
-            printf("Added option to collection.\n");
+            fprintf(stderr, "Added option to collection.\n");
 #endif
 
             if (CheckRemainingSize(request, 1) == NS_FALSE) {
 #ifdef DEBUG
-                printf("No further options/payload.\n");
+                fprintf(stderr, "No further options/payload.\n");
 #endif
                 processOptions = 0;
             }
