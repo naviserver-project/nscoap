@@ -304,7 +304,7 @@ static bool ParseRequest(Request_t *request) {
         /*
          * No payload, process length
          */
-        if (processOptions) {
+        if (processOptions == 1) {
             switch (option.length) {
                 
             case 0x0fu:
@@ -340,7 +340,7 @@ static bool ParseRequest(Request_t *request) {
                 option.delta, option.length);
 #endif
 
-        if (processOptions) {
+        if (processOptions == 1) {
             if (option.length > 0) {
 #ifdef DEBUG
                 fprintf(stderr, "Option value expected … ");
@@ -360,7 +360,7 @@ static bool ParseRequest(Request_t *request) {
                 }
             }
         }
-        if (processOptions) {
+        if (processOptions == 1) {
             /*
              * Append option to collection
              */
