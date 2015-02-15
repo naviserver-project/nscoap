@@ -284,7 +284,7 @@ static bool ParseRequest(Request_t *request) {
         case 0x0eu:
             if (CheckRemainingSize(request, 2) == NS_TRUE) {
                 option.delta =
-                    ((unsigned int)request->raw[request->position] >> 8) +
+                    ((unsigned int)request->raw[request->position] << 8) +
                     ((unsigned int)request->raw[request->position + 1] - 269);
                 request->position += 2;
             }
@@ -315,8 +315,8 @@ static bool ParseRequest(Request_t *request) {
             case 0x0eu:
                 if (CheckRemainingSize(request, 2) == NS_TRUE) {
                     option.length =
-                        ((unsigned int) request->raw[request->position] >> 8) +
-                        ((unsigned int) request->raw[request->position + 1] - 269);
+                        ((unsigned int)request->raw[request->position] << 8) +
+                        ((unsigned int)request->raw[request->position + 1] - 269);
                     request->position += 2;
                 }
                 break;
