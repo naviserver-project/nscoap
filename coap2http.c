@@ -15,6 +15,11 @@
 #define MAX_SIZE 1152
 
 /*
+ * HTTP version to be used in requests
+ */
+#define HTTP_VERSION "HTTP 1.1"
+
+/*
  * Beginning of declarations (will be moved to .h later)
  */
 
@@ -56,6 +61,18 @@ typedef struct CoapMsg_s
     int         optionCount;    /* number of valid options */
     Option_t    options[MAX_SIZE - 4];
 } CoapMsg_t;
+
+typedef struct HttpReq_s
+{
+    char        method[7];          /* HTTP method code */
+    int         messageId;          /* CoAP message ID */
+    int         tokenLength;        /* CoAP token length */
+    byte        *token;             /* CoAP token */
+    int         payloadLength;      /* Length of CoAP payload */
+    byte        *payload;           /* CoAP payload */
+    char        host[MAX_SIZE - 4]; /* CoAP/HTTP URI host portion */
+    char        path[MAX_SIZE - 4]; /* CoAP/HTTP URI path portion*/
+} HttpReq_t;
 
 static bool LoadMessage(char *file, CoapMsg_t *request);
 static bool ParseCoapMessage(CoapMsg_t *request);
@@ -386,6 +403,62 @@ static bool ParseCoapMessage(CoapMsg_t *request) {
     fprintf(stderr, "parseRequest finished.\n");
 #endif
     return request->valid;
+}
+
+/*
+ * Translate CoAP parameters to HTTP
+ */
+static bool ConstructHttpRequest (CoapMsg_t *coap, HttpReq_t *http)
+{
+    int o, c;
+    Option_t *urlComponents[coap->optionCount];
+    /*
+     * Method codes:
+     *   CoAP supports the following methods which are a subset of those
+     *   supported by HTTP
+     */
+    const char *methods[] = {
+            "",
+            "GET\0",
+            "POST\0",
+            "PUT\0",
+            "DELETE\0"
+    };
+    http->method[0] = *(methods[coap->codeValue]);
+
+    /*
+     * The CoAP message-id and token are not needed by HTTP but are kept
+     * for application logic and CoAP reply generation.
+     */
+    http->messageId = coap->messageID;
+    http->tokenLength = coap->tokenLength;
+    http->token = coap->token;
+
+    http->payloadLength = coap->payloadLength;
+    http->payload = coap->payload;
+
+    /*
+     * Process CoAP options
+     */
+    for (o = 0; o < coap->optionCount; ++o) {
+        /*
+         * URI options:
+         *
+         * [nr]  [name]
+         *    3  URI host
+         *    7  URI port
+         *   11  URI path
+         *   15  URI query
+         */
+        if (coap->options[o].delta & 0x3u) {
+            if (coap->options[o].delta < 8) {
+                strncat(&(http->host), coap->options[o].value, coap->options[o].length);
+            } else if (coap->options[o].delta < 12) {
+                snprintf(&http->path, coap->options[o].length, "/%s", coap->options[o].value);
+            }
+        }
+    }
+
 }
 
 /*
