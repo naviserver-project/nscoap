@@ -346,11 +346,8 @@ static bool ConstructHttpRequest (HttpReq_t *http)
     CoapMsg_t *coap = http->coap;
     Ns_DString optval, *optvalPtr = &optval;
     Ns_DString urlenc, *urlencPtr = &urlenc;
-    Tcl_Encoding encoding = Ns_GetCharsetEncoding("utf-8");
-
-#ifdef DEBUG
-    fprintf(stderr, "Got here.\n");
-#endif
+    Tcl_Encoding encoding = Tcl_GetEncoding(NULL, "utf-8");
+    /* Ns_GetCharsetEncoding("utf-8") would requires initialized hash-tables for quick lookup */
 
     /*
      * Method codes:
@@ -365,10 +362,10 @@ static bool ConstructHttpRequest (HttpReq_t *http)
             "DELETE"
     };
 
-    Ns_DStringInit(http->host);
-    Ns_DStringInit(http->path);
-    Ns_DStringInit(http->query);
-    http->method[0] = *(methods[coap->codeValue]);
+    Ns_DStringInit(&http->host);
+    Ns_DStringInit(&http->path);
+    Ns_DStringInit(&http->query);
+    http->method = methods[coap->codeValue];
 
     /*
      * Process CoAP options
@@ -391,28 +388,28 @@ static bool ConstructHttpRequest (HttpReq_t *http)
                 /*
                  * Hosts are not being transcoded from UTF-8 to %-encoding yet (method missing)
                  */
-                Ns_DStringNAppend(http->host, optvalPtr->string, optvalPtr->length);
+                Ns_DStringNAppend(&http->host, optvalPtr->string, optvalPtr->length);
             } else if (coap->options[opt]->delta < 8) {
-                Ns_DStringNAppend(http->host, ":", 1);
-                Ns_DStringNAppend(http->host, optvalPtr->string, optvalPtr->length);
+                Ns_DStringNAppend(&http->host, ":", 1);
+                Ns_DStringNAppend(&http->host, optvalPtr->string, optvalPtr->length);
             } else if (coap->options[opt]->delta < 12) {
                 Ns_UrlPathEncode(urlencPtr, optvalPtr->string, encoding);
-                Ns_DStringNAppend(http->path, "/", 1);
-                Ns_DStringNAppend(http->path, urlencPtr->string, urlencPtr->length);
+                Ns_DStringNAppend(&http->path, "/", 1);
+                Ns_DStringNAppend(&http->path, urlencPtr->string, urlencPtr->length);
             } else if (coap->options[opt]->delta < 16) {
-                if (http->query->length == 0) {
-                    Ns_DStringNAppend(http->query, "?", 1);
+                if (Tcl_DStringLength(&http->query) == 0) {
+                    Ns_DStringNAppend(&http->query, "?", 1);
                 } else {
-                    Ns_DStringNAppend(http->query, "&", 1);
+                    Ns_DStringNAppend(&http->query, "&", 1);
                 }
                 Ns_UrlPathEncode(urlencPtr, optvalPtr->string, encoding);
-                Ns_DStringNAppend(http->query, urlencPtr->string, urlencPtr->length);
+                Ns_DStringNAppend(&http->query, urlencPtr->string, urlencPtr->length);
             }
         }
     }
 #ifdef DEBUG
     fprintf(stderr, "=== HTTP output: ===\n");
-    fprintf(stderr, "%s %s%s %s\n", http->method, http->path->string, http->query->string, HTTP_VERSION);
+    fprintf(stderr, "%s %s%s %s\n", http->method, Tcl_DStringValue(&http->path), Tcl_DStringValue(&http->query), HTTP_VERSION);
     fprintf(stderr, "\n\n");
 #endif
     return NS_TRUE;
