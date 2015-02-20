@@ -2,22 +2,31 @@
  * CoAP to HTTP converter, standalone version
  */
 
-#include "coap2http.h"
+#include "nscoap.h"
 
 int main(int argc, char *argv[])
 {
-    CoapMsg_t request;
+    CoapMsg_t *coap = ns_malloc(sizeof(CoapMsg_t));
+    HttpReq_t *http = ns_malloc(sizeof(HttpReq_t));
 
-    bzero(&request, sizeof(CoapMsg_t));
-    request.valid = NS_TRUE;
+    Tcl_FindExecutable(argv[0]);
+    fprintf(stderr, "Tcl_GetNameOfExecutable says: %s\n", Tcl_GetNameOfExecutable());
+
+    bzero(coap, sizeof(CoapMsg_t));
+    coap->valid = NS_TRUE;
+    bzero(http, sizeof(HttpReq_t));
+    http->coap = coap;
 
     if (argc != 2) {
         fprintf(stderr, "Usage: coap2http <captured.file>\n");
         exit(-1);
     }
-    if (LoadMessage(argv[1], &request) == NS_TRUE) {
-        fprintf(stderr, "Result: %d\n", ParseCoapMessage(&request));
+    if (LoadMessage(argv[1], coap) == NS_TRUE) {
+        fprintf(stderr, "Result: %d\n", ParseCoapMessage(coap));
+        ConstructHttpRequest(http);
     }
+    ns_free(coap);
+    ns_free(http);
 
     return 0;
 }
@@ -25,13 +34,13 @@ int main(int argc, char *argv[])
 /*
  * Load message from file and save it to buffer together with its size
  */
-static bool LoadMessage(char *file, CoapMsg_t *request)
+static bool LoadMessage(char *file, CoapMsg_t *coap)
 {
     FILE *fd;
     bool success = NS_TRUE;
 
     if ((fd = fopen(file, "r"))) {
-        request->size = (int) fread(request->raw, 1, MAX_SIZE, fd);
+        coap->size = (int) fread(coap->raw, 1, MAX_COAP_SIZE, fd);
         fclose(fd);
     } else {
         fprintf(stderr, "File <%s> could not be opened.\n", file);
@@ -44,12 +53,12 @@ static bool LoadMessage(char *file, CoapMsg_t *request)
 /*
  * Check size of the CoAP message
  */
-static bool CheckRemainingSize(CoapMsg_t *request, int increment)
+static bool CheckRemainingSize(CoapMsg_t *coap, int increment)
 {
     bool success = NS_TRUE;
 
-    if ((request->position + increment) > request->size) {
-        request->valid = NS_FALSE;
+    if ((coap->position + increment) > coap->size) {
+        coap->valid = NS_FALSE;
         success = NS_FALSE;
     }
 
@@ -60,7 +69,7 @@ static bool CheckRemainingSize(CoapMsg_t *request, int increment)
  * Parse the content of a CoAP request
  */
 static bool ParseCoapMessage(CoapMsg_t *request) {
-    Option_t option;
+    Option_t *option = malloc(sizeof(Option_t));
     int      i, codeValue, lastOptionNumber = 0;
     bool     processOptions;
     Code_t   code;
@@ -75,7 +84,7 @@ static bool ParseCoapMessage(CoapMsg_t *request) {
     };
 
     request->position = 0;
-    bzero(&option, sizeof(Option_t));
+    bzero(option, sizeof(Option_t));
     request->valid = NS_TRUE;
 
 #ifdef DEBUG
@@ -179,7 +188,7 @@ static bool ParseCoapMessage(CoapMsg_t *request) {
      */
     processOptions = CheckRemainingSize(request, 1);
 
-    while (processOptions) {
+    while (processOptions == 1) {
         /*
          * Option Bits:
          *    0-3: Option Delta
@@ -189,23 +198,23 @@ static bool ParseCoapMessage(CoapMsg_t *request) {
          *    Option Length extended (8 bit, when length is 0x0d; 16 bit, when length is 0x0e)
          *    Option Value
          */
-        option.delta = ((request->raw[request->position] >> 4) & 0x0fu);
-        option.length = (request->raw[request->position] & 0x0fu);
+        option->delta = ((request->raw[request->position] >> 4) & 0x0fu);
+        option->length = (request->raw[request->position] & 0x0fu);
         request->position++;
 #ifdef DEBUG
         fprintf(stderr, "Processing option: number delta = %u, length = %u.\n",
-               option.delta, option.length);
+               option->delta, option->length);
 #endif
         /*
          * Parse option delta
          */
-        switch (option.delta) {
+        switch (option->delta) {
             
         case 0x0fu:
             /*
              * Payload marker or invalid
              */
-            switch (option.length) {
+            switch (option->length) {
             case 0x0fu:
                 request->payload = &(request->raw[request->position]);
                 request->payloadLength = request->size - request->position;
@@ -223,7 +232,7 @@ static bool ParseCoapMessage(CoapMsg_t *request) {
 
         case 0x0eu:
             if (CheckRemainingSize(request, 2) == NS_TRUE) {
-                option.delta =
+                option->delta =
                     ((unsigned int)request->raw[request->position] << 8) +
                     ((unsigned int)request->raw[request->position + 1] - 269);
                 request->position += 2;
@@ -232,7 +241,7 @@ static bool ParseCoapMessage(CoapMsg_t *request) {
             
         case 0x0du:
             if (CheckRemainingSize(request, 1) == NS_TRUE) {
-                option.delta = ((unsigned int)request->raw[request->position] - 13);
+                option->delta = ((unsigned int)request->raw[request->position] - 13);
                 request->position += 1;
             }
             break;
@@ -245,7 +254,7 @@ static bool ParseCoapMessage(CoapMsg_t *request) {
          * No payload, process length
          */
         if (processOptions == 1) {
-            switch (option.length) {
+            switch (option->length) {
                 
             case 0x0fu:
                 request->valid = NS_FALSE;
@@ -254,7 +263,7 @@ static bool ParseCoapMessage(CoapMsg_t *request) {
                 
             case 0x0eu:
                 if (CheckRemainingSize(request, 2) == NS_TRUE) {
-                    option.length =
+                    option->length =
                         ((unsigned int)request->raw[request->position] << 8) +
                         ((unsigned int)request->raw[request->position + 1] - 269);
                     request->position += 2;
@@ -263,7 +272,7 @@ static bool ParseCoapMessage(CoapMsg_t *request) {
                 
             case 0x0du:
                 if (CheckRemainingSize(request, 1) == NS_TRUE) {
-                    option.length = ((unsigned int)request->raw[request->position] - 13);
+                    option->length = ((unsigned int)request->raw[request->position] - 13);
                     request->position += 1;
                 }
                 break;
@@ -273,24 +282,24 @@ static bool ParseCoapMessage(CoapMsg_t *request) {
             }
         }
         
-        option.delta += lastOptionNumber;
-        lastOptionNumber = option.delta;
+        option->delta += lastOptionNumber;
+        lastOptionNumber = option->delta;
 #ifdef DEBUG
         fprintf(stderr, "Final option number = %u, length = %u.\n",
-                option.delta, option.length);
+                option->delta, option->length);
 #endif
 
         if (processOptions == 1) {
-            if (option.length > 0) {
+            if (option->length > 0) {
 #ifdef DEBUG
                 fprintf(stderr, "Option value expected … ");
 #endif
-                if (CheckRemainingSize(request, option.length) == NS_TRUE) {
+                if (CheckRemainingSize(request, option->length) == NS_TRUE) {
 #ifdef DEBUG
                     fprintf(stderr, "found.\n");
 #endif
-                    option.value = &(request->raw[request->position]);
-                    request->position += option.length;
+                    option->value = &(request->raw[request->position]);
+                    request->position += option->length;
                 } else {
 #ifdef DEBUG
                     fprintf(stderr, "NOT found.\n");
@@ -331,10 +340,18 @@ static bool ParseCoapMessage(CoapMsg_t *request) {
 /*
  * Translate CoAP parameters to HTTP
  */
-static bool ConstructHttpRequest (CoapMsg_t *coap, HttpReq_t *http)
+static bool ConstructHttpRequest (HttpReq_t *http)
 {
-    int o, c;
-    Option_t *urlComponents[coap->optionCount];
+    int opt;
+    CoapMsg_t *coap = http->coap;
+    Ns_DString optval, *optvalPtr = &optval;
+    Ns_DString urlenc, *urlencPtr = &urlenc;
+    Tcl_Encoding encoding = Ns_GetCharsetEncoding("utf-8");
+
+#ifdef DEBUG
+    fprintf(stderr, "Got here.\n");
+#endif
+
     /*
      * Method codes:
      *   CoAP supports the following methods which are a subset of those
@@ -342,28 +359,23 @@ static bool ConstructHttpRequest (CoapMsg_t *coap, HttpReq_t *http)
      */
     const char *methods[] = {
             "",
-            "GET\0",
-            "POST\0",
-            "PUT\0",
-            "DELETE\0"
+            "GET",
+            "POST",
+            "PUT",
+            "DELETE"
     };
+
+    Ns_DStringInit(http->host);
+    Ns_DStringInit(http->path);
+    Ns_DStringInit(http->query);
     http->method[0] = *(methods[coap->codeValue]);
-
-    /*
-     * The CoAP message-id and token are not needed by HTTP but are kept
-     * for application logic and CoAP reply generation.
-     */
-    http->messageId = coap->messageID;
-    http->tokenLength = coap->tokenLength;
-    http->token = coap->token;
-
-    http->payloadLength = coap->payloadLength;
-    http->payload = coap->payload;
 
     /*
      * Process CoAP options
      */
-    for (o = 0; o < coap->optionCount; ++o) {
+    for (opt = 0; opt < coap->optionCount; ++opt) {
+        Ns_DStringInit(optvalPtr);
+        Ns_DStringInit(urlencPtr);
         /*
          * URI options:
          *
@@ -373,15 +385,37 @@ static bool ConstructHttpRequest (CoapMsg_t *coap, HttpReq_t *http)
          *   11  URI path
          *   15  URI query
          */
-        if (coap->options[o].delta & 0x3u) {
-            if (coap->options[o].delta < 8) {
-                strncat(&(http->host), coap->options[o].value, coap->options[o].length);
-            } else if (coap->options[o].delta < 12) {
-                snprintf(&http->path, coap->options[o].length, "/%s", coap->options[o].value);
+        if (coap->options[opt]->delta & 0x3u) {
+            Ns_DStringNAppend(optvalPtr, (char *) (coap->options[opt]->value), coap->options[opt]->length);
+            if (coap->options[opt]->delta < 4) {
+                /*
+                 * Hosts are not being transcoded from UTF-8 to %-encoding yet (method missing)
+                 */
+                Ns_DStringNAppend(http->host, optvalPtr->string, optvalPtr->length);
+            } else if (coap->options[opt]->delta < 8) {
+                Ns_DStringNAppend(http->host, ":", 1);
+                Ns_DStringNAppend(http->host, optvalPtr->string, optvalPtr->length);
+            } else if (coap->options[opt]->delta < 12) {
+                Ns_UrlPathEncode(urlencPtr, optvalPtr->string, encoding);
+                Ns_DStringNAppend(http->path, "/", 1);
+                Ns_DStringNAppend(http->path, urlencPtr->string, urlencPtr->length);
+            } else if (coap->options[opt]->delta < 16) {
+                if (http->query->length == 0) {
+                    Ns_DStringNAppend(http->query, "?", 1);
+                } else {
+                    Ns_DStringNAppend(http->query, "&", 1);
+                }
+                Ns_UrlPathEncode(urlencPtr, optvalPtr->string, encoding);
+                Ns_DStringNAppend(http->query, urlencPtr->string, urlencPtr->length);
             }
         }
     }
-
+#ifdef DEBUG
+    fprintf(stderr, "=== HTTP output: ===\n");
+    fprintf(stderr, "%s %s%s %s\n", http->method, http->path->string, http->query->string, HTTP_VERSION);
+    fprintf(stderr, "\n\n");
+#endif
+    return NS_TRUE;
 }
 
 /*
