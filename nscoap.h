@@ -68,11 +68,11 @@ typedef struct CoapMsg_s
 
 typedef struct HttpReq_s
 {
-    CoapMsg_t   *coap;              /* Original CoAP request */
-    const char  *method;            /* HTTP method code */
-    Ns_DString   host;              /* CoAP/HTTP URI host portion  */
-    Ns_DString   path;              /* CoAP/HTTP URI path portion  */
-    Ns_DString   query;             /* CoAP/HTTP URI query portion */
+    CoapMsg_t   *coap;           /* Original CoAP request */
+    const char  *method;         /* HTTP method code */
+    Ns_DString  host;            /* CoAP/HTTP URI host portion  */
+    Ns_DString  path;            /* CoAP/HTTP URI path portion  */
+    Ns_DString  query;           /* CoAP/HTTP URI query portion */
 } HttpReq_t;
 
 static bool LoadMessage(char *file, CoapMsg_t *coap);

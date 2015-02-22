@@ -363,7 +363,9 @@ static bool ConstructHttpRequest (HttpReq_t *http)
     Ns_DStringInit(&http->host);
     Ns_DStringInit(&http->path);
     Ns_DStringInit(&http->query);
-    http->method = methods[coap->codeValue];
+    if (coap->codeValue < 5) {
+        http->method = methods[coap->codeValue];
+    }
 
     /*
      * Process CoAP options
