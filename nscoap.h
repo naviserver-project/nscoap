@@ -14,6 +14,11 @@
 #define MAX_COAP_SIZE 1152
 
 /*
+ * Maximum size (bytes) of a HTTP reply (needs definition)
+ */
+#define MAX_HTTP_SIZE 1152
+
+/*
  * CoAP headers have a minimum length of four bytes
  */
 #define MAX_COAP_CONTENT (MAX_COAP_SIZE - 4)
@@ -75,7 +80,17 @@ typedef struct HttpReq_s
     Ns_DString  query;           /* CoAP/HTTP URI query portion */
 } HttpReq_t;
 
-static bool LoadMessage(char *file, CoapMsg_t *coap);
+typedef struct HttpRep_s
+{
+    byte        raw[MAX_HTTP_SIZE];     /* holds the raw packet */
+    int         size;                   /* size in bytes */
+    bool        valid;                  /* validity of the reply */
+    Ns_Set     *headers;                /* HTTP headers */
+    byte       *payload;                /* pointer to beginning of payload */
+    int         payloadLength;          /* length of payload in bytes */
+} HttpRep_t;
+
+static int LoadCoapMessage(CoapMsg_t *coap, HttpRep_t *http, char *protocol);
 static bool ParseCoapMessage(CoapMsg_t *request);
 static bool ConstructHttpRequest (HttpReq_t *http);
-
+static bool ParseHttpReply (HttpRep_t *http);

@@ -7,26 +7,35 @@
 int main(int argc, char *argv[])
 {
     CoapMsg_t *coap = ns_malloc(sizeof(CoapMsg_t));
-    HttpReq_t *http = ns_malloc(sizeof(HttpReq_t));
+    HttpReq_t *http_req = ns_malloc(sizeof(HttpReq_t));
+    HttpRep_t *http_rep = ns_malloc(sizeof(HttpRep_t));
 
     Tcl_FindExecutable(argv[0]);
-    fprintf(stderr, "Tcl_GetNameOfExecutable says: %s\n", Tcl_GetNameOfExecutable());
 
     bzero(coap, sizeof(CoapMsg_t));
     coap->valid = NS_TRUE;
-    bzero(http, sizeof(HttpReq_t));
-    http->coap = coap;
+    bzero(http_rep, sizeof(HttpRep_t));
+    http_rep->valid = NS_TRUE;
+    bzero(http_req, sizeof(HttpReq_t));
+    http_req->coap = coap;
 
-    if (argc != 2) {
-        fprintf(stderr, "Usage: coap2http <captured.file>\n");
+    if (argc == 2 && strcmp(argv[1], "coap") == 0) {
+        if (LoadCoapMessage(coap, http_rep, argv[1]) == NS_TRUE) {
+            fprintf(stderr, "Result: %d\n", ParseCoapMessage(coap));
+            ConstructHttpRequest(http_req);
+        }
+    } else if (argc == 2 && strcmp(argv[1], "http") == 0) {
+        if (LoadCoapMessage(coap, http_rep, argv[1]) == NS_TRUE) {
+            ParseHttpReply(http_rep);
+        }
+    } else {
+        fprintf(stderr, "Usage: nscoap { coap | http } \n");
+        fprintf(stderr, "Write request to stdin, e.g. cat coap_capture.file | ./nscoap coap\n");
         exit(-1);
     }
-    if (LoadMessage(argv[1], coap) == NS_TRUE) {
-        fprintf(stderr, "Result: %d\n", ParseCoapMessage(coap));
-        ConstructHttpRequest(http);
-    }
+
     ns_free(coap);
-    ns_free(http);
+    ns_free(http_req);
 
     return 0;
 }
@@ -34,16 +43,16 @@ int main(int argc, char *argv[])
 /*
  * Load message from file and save it to buffer together with its size
  */
-static bool LoadMessage(char *file, CoapMsg_t *coap)
+static int LoadCoapMessage(CoapMsg_t *coap, HttpRep_t *http, char *protocol)
 {
-    FILE *fd;
-    bool success = NS_TRUE;
+    bool    success = NS_TRUE;
 
-    if ((fd = fopen(file, "r"))) {
-        coap->size = (int) fread(coap->raw, 1, MAX_COAP_SIZE, fd);
-        fclose(fd);
+    if (strcmp(protocol, "coap") == 0) {
+        coap->size = (int) fread(coap->raw, 1, MAX_COAP_SIZE, stdin);
+    } else if (strcmp(protocol, "http") == 0) {
+        http->size = (int) fread(http->raw, 1, MAX_HTTP_SIZE, stdin);
     } else {
-        fprintf(stderr, "File <%s> could not be opened.\n", file);
+        fprintf(stderr, "Unsupported protocol.\n");
         success = NS_FALSE;
     }
 
@@ -409,8 +418,48 @@ static bool ConstructHttpRequest (HttpReq_t *http)
     fprintf(stderr, "\n");
     fprintf(stderr, "=== HTTP output: ===\n");
     fprintf(stderr, "%s %s%s %s\n", http->method, Tcl_DStringValue(&http->path), Tcl_DStringValue(&http->query), HTTP_VERSION);
+    fprintf(stderr, "Host: %s\n", Tcl_DStringValue(&http->host));
     fprintf(stderr, "\n\n");
 #endif
+    return NS_TRUE;
+}
+
+static bool ParseHttpReply(HttpRep_t *http) {
+    int         pos, lastPos;
+    Ns_DString  headerLine;
+
+#ifdef DEBUG
+    fprintf(stderr, "----- ParseHttpReply started. -----\n");
+#endif
+
+    /*
+     * Split reply headers into lines
+     */
+    http->headers = Ns_SetCreate("headers");
+    for (pos = 0, lastPos = 0; pos < http->size; pos++) {
+        if (http->raw[pos] == '\n') {
+            if (pos == (lastPos + 1)) {
+                /*
+                 * Found body seperator:
+                 * Omit line, save payload coordinates, stop parsing
+                 */
+                if (http->size > ++pos) {
+                    http->payload = &http->raw[pos];
+                    http->payloadLength = (http->size - pos);
+                }
+                break;
+            } else {
+                /* Move to first char of new line */
+                lastPos++;
+                Ns_DStringInit(&headerLine);
+                Ns_DStringNAppend(&headerLine, (char *)&http->raw[lastPos], (pos - lastPos));
+                Ns_ParseHeader(http->headers, Ns_DStringValue(&headerLine), ToLower);
+                lastPos = pos;
+            }
+        }
+    }
+    Ns_SetPrint(http->headers);
+
     return NS_TRUE;
 }
 
