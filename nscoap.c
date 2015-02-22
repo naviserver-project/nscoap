@@ -69,7 +69,7 @@ static bool CheckRemainingSize(CoapMsg_t *coap, int increment)
  * Parse the content of a CoAP request
  */
 static bool ParseCoapMessage(CoapMsg_t *request) {
-    Option_t *option = malloc(sizeof(Option_t));
+    Option_t *option;
     int      i, codeValue, lastOptionNumber = 0;
     bool     processOptions;
     Code_t   code;
@@ -84,7 +84,6 @@ static bool ParseCoapMessage(CoapMsg_t *request) {
     };
 
     request->position = 0;
-    bzero(option, sizeof(Option_t));
     request->valid = NS_TRUE;
 
 #ifdef DEBUG
@@ -198,6 +197,8 @@ static bool ParseCoapMessage(CoapMsg_t *request) {
          *    Option Length extended (8 bit, when length is 0x0d; 16 bit, when length is 0x0e)
          *    Option Value
          */
+        option = malloc(sizeof(Option_t));
+        bzero(option, sizeof(Option_t));
         option->delta = ((request->raw[request->position] >> 4) & 0x0fu);
         option->length = (request->raw[request->position] & 0x0fu);
         request->position++;
@@ -250,10 +251,14 @@ static bool ParseCoapMessage(CoapMsg_t *request) {
             break;
         }
 
-        /*
-         * No payload, process length
-         */
+        /* No payload, process length */
         if (processOptions == 1) {
+            option->delta += lastOptionNumber;
+            lastOptionNumber = option->delta;
+#ifdef DEBUG
+            fprintf(stderr, "Final option number = %u, length = %u.\n",
+                    option->delta, option->length);
+#endif
             switch (option->length) {
                 
             case 0x0fu:
@@ -281,13 +286,6 @@ static bool ParseCoapMessage(CoapMsg_t *request) {
                 break;
             }
         }
-        
-        option->delta += lastOptionNumber;
-        lastOptionNumber = option->delta;
-#ifdef DEBUG
-        fprintf(stderr, "Final option number = %u, length = %u.\n",
-                option->delta, option->length);
-#endif
 
         if (processOptions == 1) {
             if (option->length > 0) {
@@ -370,7 +368,7 @@ static bool ConstructHttpRequest (HttpReq_t *http)
     /*
      * Process CoAP options
      */
-    for (opt = 0; opt < coap->optionCount; ++opt) {
+    for (opt = 0; opt < coap->optionCount; opt++) {
         Ns_DStringInit(optvalPtr);
         Ns_DStringInit(urlencPtr);
         /*
@@ -383,11 +381,9 @@ static bool ConstructHttpRequest (HttpReq_t *http)
          *   15  URI query
          */
         if (coap->options[opt]->delta & 0x3u) {
-            Ns_DStringNAppend(optvalPtr, (char *) (coap->options[opt]->value), coap->options[opt]->length);
+            Ns_DStringNAppend(optvalPtr, (char *)(coap->options[opt]->value), coap->options[opt]->length);
             if (coap->options[opt]->delta < 4) {
-                /*
-                 * Hosts are not being transcoded from UTF-8 to %-encoding yet (method missing)
-                 */
+                /* Hosts are not being transcoded from UTF-8 to %-encoding yet (method missing) */
                 Ns_DStringNAppend(&http->host, optvalPtr->string, optvalPtr->length);
             } else if (coap->options[opt]->delta < 8) {
                 Ns_DStringNAppend(&http->host, ":", 1);
@@ -408,6 +404,7 @@ static bool ConstructHttpRequest (HttpReq_t *http)
         }
     }
 #ifdef DEBUG
+    fprintf(stderr, "\n");
     fprintf(stderr, "=== HTTP output: ===\n");
     fprintf(stderr, "%s %s%s %s\n", http->method, Tcl_DStringValue(&http->path), Tcl_DStringValue(&http->query), HTTP_VERSION);
     fprintf(stderr, "\n\n");
