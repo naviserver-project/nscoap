@@ -28,10 +28,6 @@
  */
 #define HTTP_VERSION "HTTP/1.1"
 
-/*
- * Beginning of declarations (will be moved to .h later)
- */
-
 typedef unsigned char byte;
 
 /*

@@ -142,7 +142,7 @@ static bool ParseCoapMessage(CoapMsg_t *request) {
     }
 
     /*
-     * Bit 8-15: Token Length
+     * Bit 8-15: Message Code
      */
     code.class  = ((request->raw[1] >> 5) & 0x7u);
     code.detail = (request->raw[1] & 0x1fu);
@@ -458,13 +458,78 @@ static bool ParseHttpReply(HttpRep_t *http) {
             }
         }
     }
+    Ns_DStringFree(&headerLine);
+#ifdef DEBUG
     Ns_SetPrint(http->headers);
+#endif
 
     return NS_TRUE;
 }
 
 /*
- * Local Variables:
+ * Construct a CoAP message from a CoAP object.
+ */
+static bool ConstructCoapMessage (CoapMsg_t *coap) {
+    int delta, dlpos, o, pdelta = 0, pos;
+    Option_t *opt;
+
+    /* Mandatory headers. */
+    coap->raw[0] = (byte) ((coap->version << 6) &
+            (coap->type << 4) &
+            (coap->tokenLength));
+    coap->raw[1] = (byte) (((coap->codeValue / 100 & 0x7u) << 5) &
+            (coap->codeValue & 0x1fu));
+    coap->raw[2] = (byte) (((coap->messageID >> 8) & 0xffu));
+    coap->raw[3] = (byte) (coap->messageID & 0xffu);
+    memcpy(&coap->raw[4], coap->token, (size_t) coap->tokenLength);
+    pos = 4 + coap->tokenLength;
+
+    /* Options. */
+    for (o = 0; o < coap->optionCount; o++) {
+        opt = coap->options[o];
+        /* Option code. */
+        delta = opt->delta - pdelta;
+        pdelta = delta;
+        dlpos = pos++;
+        if (delta > 268) {
+            coap->raw[dlpos] = (0xeu << 4);
+            delta -= 269;
+            memcpy(&coap->raw[pos], &delta, 2);
+            pos += 2;
+        } else if (delta > 12) {
+            coap->raw[dlpos] = (0xdu << 4);
+            delta -= 13;
+            memcpy(&coap->raw[pos], &delta, 1);
+            pos += 1;
+        } else {
+            coap->raw[dlpos] = (byte)(delta << 4);
+        }
+        /* Option length. */
+        if (opt->length > 268) {
+            coap->raw[dlpos] &= 0xeu;
+            delta -= 269;
+            memcpy(&coap->raw[pos], &opt->length, 2);
+            pos += 2;
+        } else if (opt->length > 12) {
+            coap->raw[dlpos] &= 0xdu;
+            delta -= 13;
+            memcpy(&coap->raw[pos], &opt->length, 1);
+            pos += 1;
+        } else {
+            coap->raw[dlpos] &= (opt->length & 0xfu);
+        }
+    }
+
+    /* Payload marker + payload. */
+    if (coap->payloadLength > 0) {
+        coap->raw[pos++] = 0xffu;
+        memcpy(&coap->raw[pos], coap->payload, (size_t)coap->payloadLength);
+    }
+
+    return NS_TRUE;
+}
+
+/*
  * mode: c
  * c-basic-offset: 4
  * fill-column: 78
