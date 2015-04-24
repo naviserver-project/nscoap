@@ -489,9 +489,9 @@ static bool TranslateHttp2Coap(HttpRep_t *http, CoapMsg_t *coap)
     byte token[8];
     char *uuToken;
 
-    #ifdef DEBUG
-        fprintf(stderr, "----- TranslateHttp2Coap started. -----\n");
-    #endif
+#ifdef DEBUG
+    fprintf(stderr, "----- TranslateHttp2Coap started. -----\n");
+#endif
 
     uuToken = Ns_SetIGet(http->headers, "x-coap-token");
     if (uuToken == NULL) {
@@ -503,6 +503,9 @@ static bool TranslateHttp2Coap(HttpRep_t *http, CoapMsg_t *coap)
 
     coap->version       = 1;
     coap->codeValue     = http->status;
+#ifdef DEBUG
+    fprintf(stderr, "HTTP status: %u\n", http->status);
+#endif
     /* Fake message ID until we match the one of the request. */
     coap->messageID     = 0xbeefu;
     coap->payload       = http->payload;
@@ -540,6 +543,7 @@ static bool ConstructHttpRequest(HttpReq_t *http, Packet_t *packet)
 static bool ParseHttpReply(Packet_t *packet, HttpRep_t *http)
 {
     int         pos, lastPos;
+    char        status[4];
     Ns_DString  headerLine;
 
 #ifdef DEBUG
@@ -547,14 +551,15 @@ static bool ParseHttpReply(Packet_t *packet, HttpRep_t *http)
 #endif
 
     /* Save status code */
-    pos = 8;
-    memcpy(&http->status, &packet->raw[pos], 3);
+        memcpy(&status[0], &packet->raw[9], 3);
+    status[4] = '\0';
+    http->status = (int) strtol(&status[0], NULL, 10);
 
     /*
      * Split reply headers into lines
      */
     http->headers = Ns_SetCreate("headers");
-    for (pos = 11, lastPos = 0; pos < packet->size; pos++) {
+    for (pos = 11, lastPos = 11; pos < packet->size; pos++) {
         if (packet->raw[pos] == '\n') {
             if (pos == (lastPos + 1)) {
                 /*
@@ -596,7 +601,6 @@ static bool ConstructCoapMessage (CoapMsg_t *coap, Packet_t *packet) {
 
 #ifdef DEBUG
     fprintf(stderr, "----- ConstructCoapMessage started. -----\n");
-    fprintf(stderr, "CoAP version: %u\n", coap->version);
 #endif
 
     /* Mandatory headers. */
