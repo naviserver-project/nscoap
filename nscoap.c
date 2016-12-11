@@ -289,17 +289,20 @@ Send(Ns_Sock *sock, const struct iovec *bufs, int nbufs,
     }
     
     /*
-     * if packetsize is zero that means send every given chunk in separate UDP packet,
+     * If packetsize is zero send every given chunk in separate UDP packet,
      * otherwise try to buffer and send data in packetsize chunks
      */
-    while (drvPtr->packetsize > -1 && coapp->out->size > 0
+    len = 0;
+    while (len != -1
+           && drvPtr->packetsize > -1
+           && coapp->out->size > 0
            && coapp->out->size >= drvPtr->packetsize) {
         if (drvPtr->packetsize > 0) {
             len = drvPtr->packetsize;
         } else {
             len = coapp->out->size;
         }
-        len = sendto(sock->sock, coapp->out->raw, (size_t)coapp->out->size, 0,
+        len = sendto(sock->sock, coapp->out->raw, (size_t)len, 0,
                      saPtr, Ns_SockaddrGetSockLen(saPtr));
         if (len == -1) {
             char ipString[NS_IPADDR_SIZE];
@@ -307,13 +310,14 @@ Send(Ns_Sock *sock, const struct iovec *bufs, int nbufs,
 		   sock->driver->name, sock->sock, len, 
 		   ns_inet_ntop(saPtr, ipString, sizeof(ipString)),
                    strerror(errno));
+        } else {
+            /*
+             * Move remaining bytes to the beginning of the buffer for the next iteration
+             */
+            memmove(coapp->out->raw, coapp->out->raw + len, coapp->out->size - len);
+            coapp->out->size -= len;
+            Ns_Log(Debug, "send: sent %" PRIdz " bytes", len);
         }
-
-        /*
-         * Move remaining bytes to the beginning of the buffer for the next iteration
-         */
-        memmove(coapp->out->raw, coapp->out->raw + len, coapp->out->size - len);
-        coapp->out->size -= len;
     }
     
     Ns_Log(Debug, "send finished");
@@ -375,10 +379,12 @@ Close(Ns_Sock *sock)
                              saPtr, Ns_SockaddrGetSockLen(saPtr));
                 if (len == -1) {
                     char ipString[NS_IPADDR_SIZE];
-                    Ns_Log(Error,"nsudp: %s: FD %d: sendto %d bytes to %s: %s", 
+                    Ns_Log(Error, "%s: FD %d: sendto %d bytes to %s: %s", 
                            sock->driver->name, sock->sock, coapp->out->size, 
                            ns_inet_ntop(saPtr, ipString, sizeof(ipString)),
                            strerror(errno));
+                } else {
+                    Ns_Log(Debug, "close: sent %" PRIdz " bytes", len);
                 }
             }
             ns_free(coapp->out);
@@ -926,7 +932,7 @@ static bool ParseHttpReply(Packet_t *packet, HttpRep_t *http)
     char        status[4];
     Ns_DString  headerLine;
 
-    Ns_Log(Debug, "ParseHttpReply started");
+    Ns_Log(Debug, "ParseHttpReply: started");
 
     /* Save status code */
     memcpy(&status[0], &packet->raw[9], 3);
@@ -939,7 +945,7 @@ static bool ParseHttpReply(Packet_t *packet, HttpRep_t *http)
     http->headers = Ns_SetCreate("headers");
     for (pos = 11, lineStart = 11; pos < packet->size; pos++) {
         if (packet->raw[pos] == '\n') {
-            /* Found line break, peek for proper[tm] body separator */
+            /* Found line break, peek for proper body separator */
             if (packet->raw[pos - 1] == '\r'
                 && packet->size >= pos + 2
                 && !memcmp(&(packet->raw[pos + 1]), "\r\n", 2)) {
@@ -964,8 +970,8 @@ static bool ParseHttpReply(Packet_t *packet, HttpRep_t *http)
     }
     
     Ns_DStringFree(&headerLine);
-    Ns_Log(Debug, "parseHttpReply finished; headers: %d, payload length: %u, packet size: %u",
-           (int)http->headers->size, http->payloadLength,  packet->size);
+    Ns_Log(Debug, "ParseHttpReply: finished; headers: %d, payload length: %u, packet size: %u",
+           (int)http->headers->size, http->payloadLength, packet->size);
 
     return NS_TRUE;
 }
