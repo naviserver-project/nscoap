@@ -5,12 +5,12 @@ endif
 #
 # Program name
 #
-PGM     = nscoap
+MOD     = nscoap.so
 
 #
 # Objects to build.
 #
-PGMOBJS = nscoap.o
+MODOBJS = nscoap.o
 
 include $(NAVISERVER)/include/Makefile.module
 
