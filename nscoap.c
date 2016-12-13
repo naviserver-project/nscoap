@@ -246,81 +246,25 @@ static ssize_t
 Send(Ns_Sock *sock, const struct iovec *bufs, int nbufs,
      const Ns_Time *timeoutPtr, unsigned int flags)
 {
-    CoapMsg_t *coap = InitCoapMsg();
-    HttpRep_t *http_rep = ns_calloc(1u, sizeof(HttpRep_t));
-    Packet_t *packet_in = ns_calloc(1u, sizeof(Packet_t));
-    Packet_t *packet_out = ns_calloc(1u, sizeof(Packet_t));
-    ssize_t len, size;
-    struct sockaddr *saPtr = (struct sockaddr *)&(sock->sa);
-    int maxlen;
-    CoapParams_t *coapp = sock->arg;
-    Ns_DString *inbuf = ns_calloc(1u, sizeof(Ns_DString));
-    CoapDriver *drvPtr = sock->driver->arg;
+    int nbuf, size;
+    CoapParams_t *cp = sock->arg;
+    Ns_DString *inbuf = cp->sendbuf;
 
-    Ns_DStringInit(inbuf);
-    
-    if (coapp == NULL) {
-        coapp = ns_calloc(1u, sizeof(CoapParams_t));
-        sock->arg = coapp;
-    }
-    coapp->out = packet_out;
-
-    for (len = size = 0; len < nbufs; len++) {
-        Tcl_DStringAppend(inbuf, bufs[len].iov_base, (int)bufs[len].iov_len);
-        size += bufs[len].iov_len;
-    }
-
-    maxlen = size > MAX_PACKET_SIZE ? MAX_PACKET_SIZE : size;
-    memcpy(packet_in->raw, inbuf->string, maxlen);
-    packet_in->size = maxlen;
-
-    /* After processing HTTP/CoAP headers we only need to append data */
-    if (!ParseHttpReply(packet_in, http_rep)) {
-        Ns_Log(Error, "ParseHttpReply failed, cancel sending");
-        return -1;
-    }
-    if (!TranslateHttp2Coap(http_rep, coap, coapp)) {
-        Ns_Log(Error, "TranslateHttp2Coap failed, cancel sending");
-        return -1;
-    }
-    if (!SerializeCoapMessage(coap, packet_out)) {
-        Ns_Log(Error, "SerializeCoapMessage failed, cancel sending");
-        return -1;
+    /* sock->arg populated by Listen() */
+    if (inbuf == NULL) {
+        inbuf = ns_calloc(1u, sizeof(Ns_DString));
+        Ns_DStringInit(inbuf);
+        cp->sendbuf = inbuf;
     }
     
-    /*
-     * If packetsize is zero send every given chunk in separate UDP packet,
-     * otherwise try to buffer and send data in packetsize chunks
-     */
-    len = 0;
-    while (len != -1
-           && drvPtr->packetsize > -1
-           && coapp->out->size > 0
-           && coapp->out->size >= drvPtr->packetsize) {
-        if (drvPtr->packetsize > 0) {
-            len = drvPtr->packetsize;
-        } else {
-            len = coapp->out->size;
-        }
-        len = sendto(sock->sock, coapp->out->raw, (size_t)len, 0,
-                     saPtr, Ns_SockaddrGetSockLen(saPtr));
-        if (len == -1) {
-            char ipString[NS_IPADDR_SIZE];
-            Ns_Log(Error, "%s: FD %d: sendto %" PRIdz " bytes to %s: %s", 
-		   sock->driver->name, sock->sock, len, 
-		   ns_inet_ntop(saPtr, ipString, sizeof(ipString)),
-                   strerror(errno));
-        } else {
-            /*
-             * Move remaining bytes to the beginning of the buffer for the next iteration
-             */
-            memmove(coapp->out->raw, coapp->out->raw + len, coapp->out->size - len);
-            coapp->out->size -= len;
-            Ns_Log(Debug, "send: sent %" PRIdz " bytes", len);
-        }
+    /* Append buffer content to sendbuf */
+    for (nbuf = size = 0; nbuf < nbufs; nbuf++) {
+        Tcl_DStringAppend(inbuf, bufs[nbuf].iov_base, (int)bufs[nbuf].iov_len);
+        size += bufs[nbuf].iov_len;
     }
     
-    Ns_Log(Debug, "send finished");
+    Ns_Log(Debug, "Send: finished; received %d bytes, total of %d bytes buffered",
+           size, Ns_DStringLength(inbuf));
     return size;
 }
 
@@ -368,32 +312,58 @@ Keep(Ns_Sock *sock)
 static void
 Close(Ns_Sock *sock)
 {
-    CoapParams_t *coapp = sock->arg;
+    CoapMsg_t *coap = InitCoapMsg();
+    HttpRep_t *http = ns_calloc(1u, sizeof(HttpRep_t));
+    CoapParams_t *cp = sock->arg;
+    Ns_DString *sendbuf;
+    int plen = 0, sendbuflen = 0;
+    ssize_t len;
+    Packet_t *pin = ns_calloc(1u, sizeof(Packet_t));
+    Packet_t *pout = ns_calloc(1u, sizeof(Packet_t));    
     struct sockaddr *saPtr = (struct sockaddr *)&(sock->sa);
-    size_t len;
+    char ipString[NS_IPADDR_SIZE];
 
-    if (coapp != NULL) {
-        if (coapp->out != NULL) {
-            if (coapp->out->size > 0) {
-                len = sendto(sock->sock, coapp->out->raw, (size_t)coapp->out->size, 0,
-                             saPtr, Ns_SockaddrGetSockLen(saPtr));
-                if (len == -1) {
-                    char ipString[NS_IPADDR_SIZE];
-                    Ns_Log(Error, "%s: FD %d: sendto %d bytes to %s: %s", 
-                           sock->driver->name, sock->sock, coapp->out->size, 
-                           ns_inet_ntop(saPtr, ipString, sizeof(ipString)),
-                           strerror(errno));
-                } else {
-                    Ns_Log(Debug, "close: sent %" PRIdz " bytes", len);
-                }
-            }
-            ns_free(coapp->out);
-        }
-        ns_free(coapp);
-        sock->arg = NULL;
+    if (cp != NULL && cp->sendbuf != NULL) {
+        sendbuf = cp->sendbuf;
+        sendbuflen = Ns_DStringLength(sendbuf);
+    } else {
+        Ns_Log(Debug, "Close: exiting; missing coap socket args or send buffer");
+        return;
     }
+
+    /* Continue using reasonable size */
+    plen = sendbuflen > MAX_PACKET_SIZE ? MAX_PACKET_SIZE : sendbuflen;
+    memcpy(pin->raw, sendbuf->string, plen);
+    pin->size = plen;
+
+    if (!ParseHttp(pin, http)
+        || !Http2Coap(http, coap, cp)
+        || !SerializeCoap(coap, pout)) {       
+        Ns_Log(Error, "Close: exiting; http2coap proxying failed, nothing sent");
+        return;
+    }
+    len = sendto(sock->sock, pout->raw, (size_t)pout->size, 0,
+                 saPtr, Ns_SockaddrGetSockLen(saPtr));
+    if (len == -1) {
+        Ns_Log(Error, "Close: FD %d: sendto %d bytes to %s: %s", 
+        sock->sock, pout->size, 
+        ns_inet_ntop(saPtr, ipString, sizeof(ipString)),
+        strerror(errno));
+    } else {
+        Ns_Log(Debug, "Close: sent %" PRIdz " bytes", len);
+    }
+
+    ns_free(coap);
+    ns_free(http);
+    ns_free(pin);
+    ns_free(pout);
+    Ns_DStringFree(sendbuf);
+    sock->arg = NULL;
     sock->sock = NS_INVALID_SOCKET;
+
+    return;
 }
+
 
 static int
 CoapObjCmd(ClientData arg, Tcl_Interp *interp, int objc, Tcl_Obj *CONST* objv)
@@ -566,7 +536,7 @@ static bool ParseCoapMessage(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *pa
     packet->position = 0;
     coap->valid = NS_TRUE;
 
-    Ns_Log(Debug, "ParseCoapMessage started");
+    Ns_Log(Debug, "ParseCoapMessage: started");
     Ns_Log(Debug, "ParseCoapMessage: packet length: %d", packet->size);
     /* CoAP messages can't be shorter than 4 bytes */
     if (CheckRemainingSize(packet, 4) == NS_FALSE) {
@@ -758,7 +728,7 @@ static bool ParseCoapMessage(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *pa
 	Ns_Log(Debug, "ParseCoapMessage: finished parsing option/payload");
     }
 
-    Ns_Log(Debug, "ParseCoapMessage finished");
+    Ns_Log(Debug, "ParseCoapMessage: finished");
     return coap->valid;
 }
 
@@ -863,11 +833,9 @@ static bool TranslateCoap2Http(CoapMsg_t *coap, HttpReq_t *http) {
  *
  * Returns a boolean value indicating success.
  */
-static bool TranslateHttp2Coap(HttpRep_t *http, CoapMsg_t *coap, CoapParams_t *params)
+static bool Http2Coap(HttpRep_t *http, CoapMsg_t *coap, CoapParams_t *params)
 {
     bool success = NS_TRUE;
-
-    Ns_Log(Debug, "h2c started");
 
     /* consider conserved CoAP request parameter */
     if (params->tokenLength > 0) {
@@ -890,7 +858,7 @@ static bool TranslateHttp2Coap(HttpRep_t *http, CoapMsg_t *coap, CoapParams_t *p
 
     coap->version       = 1;
     coap->codeValue     = http->status;
-    Ns_Log(Debug, "h2c: HTTP status: %u", http->status);
+    Ns_Log(Debug, "Http2Coap: finished; HTTP status: %u", http->status);
 
     coap->payload       = http->payload;
     coap->payloadLength = http->payloadLength;
@@ -926,13 +894,11 @@ static bool SerializeHttpRequest(HttpReq_t *http, Packet_t *packet)
 }
 
 
-static bool ParseHttpReply(Packet_t *packet, HttpRep_t *http)
+static bool ParseHttp(Packet_t *packet, HttpRep_t *http)
 {
     int         pos, lineStart;
     char        status[4];
     Ns_DString  headerLine;
-
-    Ns_Log(Debug, "ParseHttpReply: started");
 
     /* Save status code */
     memcpy(&status[0], &packet->raw[9], 3);
@@ -970,7 +936,7 @@ static bool ParseHttpReply(Packet_t *packet, HttpRep_t *http)
     }
     
     Ns_DStringFree(&headerLine);
-    Ns_Log(Debug, "ParseHttpReply: finished; headers: %d, payload length: %u, packet size: %u",
+    Ns_Log(Debug, "ParseHttp: finished; headers: %d, payload length: %u, packet size: %u",
            (int)http->headers->size, http->payloadLength, packet->size);
 
     return NS_TRUE;
@@ -980,11 +946,9 @@ static bool ParseHttpReply(Packet_t *packet, HttpRep_t *http)
 /*
  * Construct a CoAP message from a CoAP object.
  */
-static bool SerializeCoapMessage (CoapMsg_t *coap, Packet_t *packet) {
+static bool SerializeCoap (CoapMsg_t *coap, Packet_t *packet) {
     int delta, dlpos, o, maxlen, pdelta = 0, pos;
     Option_t *opt;
-
-    Ns_Log(Debug, "SerializeCoapMessage started");
 
     /* Mandatory headers */
     packet->raw[0] = (byte)((coap->version << 6) |

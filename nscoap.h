@@ -13,8 +13,8 @@
 /* Maximum size of a packet that's read from file. */
 #define MAX_PACKET_SIZE 16384
 
-/* CoAP headers have a minimum length of four bytes */
-#define MAX_COAP_CONTENT (MAX_COAP_SIZE - 4)
+/* Fallback value as per RFC 7252 section 4.6 */
+#define MAX_COAP_CONTENT 1024
 
 /* HTTP version to be used in requests */
 #define HTTP_VERSION "HTTP/1.0"
@@ -84,7 +84,7 @@ typedef struct {
 /* CoAP parameters (sock->arg) */
 typedef struct CoapParams_s
 {
-    Packet_t    *out;                    /* remaining outgoing data */
+    Ns_DString  *sendbuf;                /* buffered respnse waiting to be sent */
     int          type;                   /* message type (for con/ack matching) */
     int          messageID;              /* message ID (for req/ack matching) */
     byte         token[8];               /* CoAP token */
@@ -92,12 +92,12 @@ typedef struct CoapParams_s
 } CoapParams_t;
 
 /* Locally defined functions */
-static bool SerializeCoapMessage(CoapMsg_t *coap, Packet_t *packet);
+static bool SerializeCoap(CoapMsg_t *coap, Packet_t *packet);
 static bool SerializeHttpRequest (HttpReq_t *http, Packet_t *packet);
 static bool ParseCoapMessage(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params);
-static bool ParseHttpReply (Packet_t *packet, HttpRep_t *http);
+static bool ParseHttp(Packet_t *packet, HttpRep_t *http);
 static bool TranslateCoap2Http(CoapMsg_t *coap, HttpReq_t *http);
-static bool TranslateHttp2Coap(HttpRep_t *http, CoapMsg_t *coap, CoapParams_t *params);
+static bool Http2Coap(HttpRep_t *http, CoapMsg_t *coap, CoapParams_t *params);
 static CoapMsg_t *InitCoapMsg(void);
 static byte Http2CoapCode(int http);
 
