@@ -93,10 +93,10 @@ typedef struct CoapParams_s
 
 /* Locally defined functions */
 static bool SerializeCoap(CoapMsg_t *coap, Packet_t *packet);
-static bool SerializeHttpRequest (HttpReq_t *http, Packet_t *packet);
-static bool ParseCoapMessage(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params);
+static bool SerializeHttp(HttpReq_t *http, Packet_t *packet);
+static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params);
 static bool ParseHttp(Packet_t *packet, HttpRep_t *http);
-static bool TranslateCoap2Http(CoapMsg_t *coap, HttpReq_t *http);
+static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http);
 static bool Http2Coap(HttpRep_t *http, CoapMsg_t *coap, CoapParams_t *params);
 static CoapMsg_t *InitCoapMsg(void);
 static byte Http2CoapCode(int http);

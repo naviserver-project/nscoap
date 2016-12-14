@@ -175,14 +175,14 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int nbufs,
      Ns_Time *timeoutPtr, unsigned int flags)
 {
      CoapMsg_t *coap = InitCoapMsg();
-     HttpReq_t *http_req = ns_calloc(1u, sizeof(HttpReq_t));
-     Packet_t *packet_in = ns_calloc(1u, sizeof(Packet_t));
-     Packet_t *packet_out = ns_calloc(1u, sizeof(Packet_t));
-     CoapParams_t *coapp = sock->arg;
+     HttpReq_t *http = ns_calloc(1u, sizeof(HttpReq_t));
+     Packet_t *pin = ns_calloc(1u, sizeof(Packet_t));
+     Packet_t *pout = ns_calloc(1u, sizeof(Packet_t));
+     CoapParams_t *cp = sock->arg;
      ssize_t msgsize;
      socklen_t socklen;
 
-     msgsize = recvfrom(sock->sock, packet_in->raw, bufs->iov_len, 0,
+     msgsize = recvfrom(sock->sock, pin->raw, bufs->iov_len, 0,
 			(struct sockaddr *)&(sock->sa), &socklen);
 
      /*
@@ -190,36 +190,30 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int nbufs,
       * initialized (no address familiy is known).
       */
      socklen = (socklen_t)sizeof(sock->sa);
-     packet_in->size = (int)msgsize;
-     Ns_Log(Debug, "recv proxying started, msgsize = %d", packet_in->size);
+     pin->size = (int)msgsize;
      
      if (msgsize > 0) {
-         if (coapp == NULL) {
-             coapp = ns_calloc(1u, sizeof(CoapParams_t));
-             sock->arg = coapp;
+         if (cp == NULL) {
+             cp = ns_calloc(1u, sizeof(CoapParams_t));
+             sock->arg = cp;
          }
-	 if (!ParseCoapMessage(packet_in, coap, coapp)) {
-             Ns_Log(Error, "ParseCoapMessage failed, cancel receiving");
+	 if (!ParseCoap(pin, coap, cp)
+             || !Coap2Http(coap, http)
+             || !SerializeHttp(http, pout)) {
+             Ns_Log(Error, "Recv: finished; parse/proxy failed");
              return -1;
          }
-	 if (!TranslateCoap2Http(coap, http_req)) {
-             Ns_Log(Error, "TranslateCoap2Http failed, cancel receiving");
-             return -1;
-         }
-	 if (!SerializeHttpRequest(http_req, packet_out)) {
-             Ns_Log(Error, "SerializeHttpRequest failed, cancel receiving");
-             return -1;
-         }
-
-         Ns_Log(Debug, "recv proxying finished");
-         memcpy(bufs->iov_base, packet_out->raw, (size_t)packet_out->size);
-         msgsize = (ssize_t)packet_out->size;
+         memcpy(bufs->iov_base, pout->raw, (size_t)pout->size);
+         msgsize = (ssize_t)pout->size;
+         Ns_Log(Debug, "Recv: finished; processed %" PRIdz " bytes", msgsize);
+     } else {
+         Ns_Log(Debug, "Recv: finished; no data received");
      }
 
      ns_free(coap);
-     ns_free(http_req);
-     ns_free(packet_in);
-     ns_free(packet_out);
+     ns_free(http);
+     ns_free(pin);
+     ns_free(pout);
      
      return msgsize;
 }
@@ -339,7 +333,7 @@ Close(Ns_Sock *sock)
     if (!ParseHttp(pin, http)
         || !Http2Coap(http, coap, cp)
         || !SerializeCoap(coap, pout)) {       
-        Ns_Log(Error, "Close: exiting; http2coap proxying failed, nothing sent");
+        Ns_Log(Error, "Close: exiting; proxy/parse failed, nothing sent");
         return;
     }
     len = sendto(sock->sock, pout->raw, (size_t)pout->size, 0,
@@ -519,7 +513,7 @@ static bool CheckRemainingSize(Packet_t *packet, int increment)
  *
  * Returns a boolean value indicating success.
  */
-static bool ParseCoapMessage(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
+static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
     Option_t   *option;
     int         i, codeValue, lastOptionNumber = 0;
     bool        processOptions;
@@ -536,7 +530,6 @@ static bool ParseCoapMessage(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *pa
     packet->position = 0;
     coap->valid = NS_TRUE;
 
-    Ns_Log(Debug, "ParseCoapMessage: started");
     Ns_Log(Debug, "ParseCoapMessage: packet length: %d", packet->size);
     /* CoAP messages can't be shorter than 4 bytes */
     if (CheckRemainingSize(packet, 4) == NS_FALSE) {
@@ -728,7 +721,6 @@ static bool ParseCoapMessage(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *pa
 	Ns_Log(Debug, "ParseCoapMessage: finished parsing option/payload");
     }
 
-    Ns_Log(Debug, "ParseCoapMessage: finished");
     return coap->valid;
 }
 
@@ -738,7 +730,7 @@ static bool ParseCoapMessage(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *pa
  *
  * Returns a boolean value indicating success.
  */
-static bool TranslateCoap2Http(CoapMsg_t *coap, HttpReq_t *http) {
+static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http) {
     bool success = NS_TRUE;
     int opt;
     //size_t uutokenLength = 1 + (size_t)(coap->tokenLength * 4) / 2;
@@ -872,7 +864,7 @@ static bool Http2Coap(HttpRep_t *http, CoapMsg_t *coap, CoapParams_t *params)
  *
  * Returns a boolean value indicating success.
  */
-static bool SerializeHttpRequest(HttpReq_t *http, Packet_t *packet)
+static bool SerializeHttp(HttpReq_t *http, Packet_t *packet)
 {
     Ns_DString request;
 
