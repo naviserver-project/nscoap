@@ -752,8 +752,6 @@ static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http) {
             "DELETE"
     };
 
-    Ns_Log(Debug, "c2h started");
-    
     /* Ns_GetCharsetEncoding("utf-8") would require initialized hash-tables for quick lookup */
     Tcl_Encoding encoding = Tcl_GetEncoding(NULL, "utf-8");
 
@@ -815,7 +813,7 @@ static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http) {
         }
     }
 
-    Ns_Log(Debug, "c2h finished");
+    Ns_Log(Debug, "Coap2Http: finished; processed %d CoAP options", coap->optionCount);
     return success;
 }
 
@@ -880,7 +878,7 @@ static bool SerializeHttp(HttpReq_t *http, Packet_t *packet)
 	   (size_t)Ns_DStringLength(&request));
     packet->size = Ns_DStringLength(&request);
 
-    Ns_Log(Debug, "chr: HTTP output: %s", Ns_DStringValue(&request));
+    Ns_Log(Debug, "SerializeHttp: finished; HTTP output:\n%s", Ns_DStringValue(&request));
 
     return NS_TRUE;
 }
