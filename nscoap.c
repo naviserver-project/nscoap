@@ -117,11 +117,11 @@ CoapInterpInit(Tcl_Interp *interp, const void *arg)
  */
 
 static NS_SOCKET
-Listen(Ns_Driver *driver, const char *address, unsigned short port, int backlog)
+Listen(Ns_Driver *driver, const char *address, unsigned short port, int backlog, bool reuseport)
 {
     NS_SOCKET sock;
 
-    sock = Ns_SockListenUdp((char*)address, port);
+    sock = Ns_SockListenUdp((char*)address, port, reuseport);
     if (sock != NS_INVALID_SOCKET) {
         (void) Ns_SockSetNonBlocking(sock);
     }
