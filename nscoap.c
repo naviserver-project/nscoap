@@ -60,6 +60,9 @@
 NS_EXPORT int Ns_ModuleVersion = 1;
 NS_EXPORT Ns_ModuleInitProc Ns_ModuleInit;
 
+static Ns_LogSeverity Ns_LogCoapDebug;
+
+
 NS_EXPORT int Ns_ModuleInit(const char *server, const char *module)
 {
     const char *path;
@@ -84,6 +87,8 @@ NS_EXPORT int Ns_ModuleInit(const char *server, const char *module)
     init.path = path;
     init.protocol = "udp";
     init.defaultPort = 5683;
+
+    Ns_LogCoapDebug = Ns_CreateLogSeverity("Debug(coap)");
 
     Ns_TclRegisterTrace(server, CoapInterpInit, drvPtr, NS_TCL_TRACE_CREATE);
 
@@ -205,9 +210,9 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int nbufs,
          }
          memcpy(bufs->iov_base, pout->raw, (size_t)pout->size);
          msgsize = (ssize_t)pout->size;
-         Ns_Log(Debug, "Recv: finished; processed %" PRIdz " bytes", msgsize);
+         Ns_Log(Ns_LogCoapDebug, "Recv: finished; processed %" PRIdz " bytes", msgsize);
      } else {
-         Ns_Log(Debug, "Recv: finished; no data received");
+         Ns_Log(Ns_LogCoapDebug, "Recv: finished; no data received");
      }
 
      ns_free(coap);
@@ -257,7 +262,7 @@ Send(Ns_Sock *sock, const struct iovec *bufs, int nbufs,
         size += bufs[nbuf].iov_len;
     }
     
-    Ns_Log(Debug, "Send: finished; received %d bytes, total of %d bytes buffered",
+    Ns_Log(Ns_LogCoapDebug, "Send: finished; received %d bytes, total of %d bytes buffered",
            size, Ns_DStringLength(inbuf));
     return size;
 }
@@ -321,7 +326,7 @@ Close(Ns_Sock *sock)
         sendbuf = cp->sendbuf;
         sendbuflen = Ns_DStringLength(sendbuf);
     } else {
-        Ns_Log(Debug, "Close: exiting; missing coap socket args or send buffer");
+        Ns_Log(Ns_LogCoapDebug, "Close: exiting; missing coap socket args or send buffer");
         return;
     }
 
@@ -344,7 +349,7 @@ Close(Ns_Sock *sock)
         ns_inet_ntop(saPtr, ipString, sizeof(ipString)),
         strerror(errno));
     } else {
-        Ns_Log(Debug, "Close: sent %" PRIdz " bytes", len);
+        Ns_Log(Ns_LogCoapDebug, "Close: sent %" PRIdz " bytes", len);
     }
 
     ns_free(coap);
@@ -530,16 +535,16 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
     packet->position = 0;
     coap->valid = NS_TRUE;
 
-    Ns_Log(Debug, "ParseCoapMessage: packet length: %d", packet->size);
+    Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: packet length: %d", packet->size);
     /* CoAP messages can't be shorter than 4 bytes */
     if (CheckRemainingSize(packet, 4) == NS_FALSE) {
-        Ns_Log(Debug, "ParseCoapMessage: message shorter than 4 bytes");
+        Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: message shorter than 4 bytes");
         return NS_FALSE;
     }
 
     /* Bit 0-1: CoAP version: Must be 0b01 */
     coap->version = ((packet->raw[0] >> 6) == 0x1u);
-    Ns_Log(Debug, "ParseCoapMessage: version %d", coap->version);
+    Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: version %d", coap->version);
     if (coap->version == 0) {
         coap->valid = NS_FALSE;
         return NS_FALSE;
@@ -548,11 +553,11 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
     /* Bit 2-3: Type of CoAP message */
     coap->type = ((packet->raw[0] >> 4) & 0x3u);
     params->type = coap->type;
-    Ns_Log(Debug, "ParseCoapMessage: message type: %d", coap->type);
+    Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: message type: %d", coap->type);
 
     /* Bit 4-7: Token Length */
     coap->tokenLength = (packet->raw[0] & 0x0fu);
-    Ns_Log(Debug, "ParseCoapMessage: token length: %d", (int)coap->tokenLength);
+    Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: token length: %d", (int)coap->tokenLength);
 
     if (coap->tokenLength > 8) {
         coap->valid = NS_FALSE;
@@ -563,7 +568,7 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
     code.class  = ((packet->raw[1] >> 5) & 0x7u);
     code.detail = (packet->raw[1] & 0x1fu);
     codeValue   = code.class * 100 + code.detail;
-    Ns_Log(Debug, "ParseCoapMessage: message code: %d", codeValue);
+    Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: message code: %d", codeValue);
     
     /*
      * Check, if the code belongs to the codes defined by the CoAP RFC.  If
@@ -583,7 +588,7 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
     /* Bit 16-31: Message ID */
     coap->messageID = ((unsigned int) packet->raw[2] << 8) + (unsigned int) packet->raw[3];
     params->messageID = coap->messageID;
-    Ns_Log(Debug, "ParseCoapMessage: messageID: %d", coap->messageID);
+    Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: messageID: %d", coap->messageID);
 
     /* Bit 32ff: Token */
     packet->position = 4;
@@ -593,7 +598,7 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
             memcpy(params->token, coap->token, coap->tokenLength);
             params->tokenLength = coap->tokenLength;
             packet->position += coap->tokenLength;
-	    Ns_Log(Debug, "ParseCoapMessage: valid token found");
+	    Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: valid token found");
         } else {
             return NS_FALSE;
         }
@@ -620,7 +625,7 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
         option->delta = ((packet->raw[packet->position] >> 4) & 0x0fu);
         option->length = (packet->raw[packet->position] & 0x0fu);
         packet->position++;
-	Ns_Log(Debug, "ParseCoapMessage: processing option: number delta = %u, length = %u",
+	Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: processing option: number delta = %u, length = %u",
 	       option->delta, option->length);
 
         /* Parse option delta */
@@ -632,7 +637,7 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
             case 0x0fu:
 		    coap->payload = &(packet->raw[packet->position]);
 		    coap->payloadLength = packet->size - packet->position;
-		    Ns_Log(Debug, "ParseCoapMessage: payload marker detected. Payload length = %d",
+		    Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: payload marker detected. Payload length = %d",
 			   coap->payloadLength);
 		    break;
             default:
@@ -666,7 +671,7 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
         if (processOptions == 1) {
             option->delta += lastOptionNumber;
             lastOptionNumber = option->delta;
-	    Ns_Log(Debug, "ParseCoapMessage: final option number = %u",
+	    Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: final option number = %u",
 		   option->delta);
             switch (option->length) {           
             case 0x0fu:
@@ -693,7 +698,7 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
             default:
                 break;
             }
-            Ns_Log(Debug, "ParseCoapMessage: final option length = %u",
+            Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: final option length = %u",
 		   option->length);
         }
 
@@ -712,13 +717,13 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
 		
             /* Append option to collection */
             coap->options[coap->optionCount++] = option;
-	    Ns_Log(Debug, "ParseCoapMessage: added option to collection");
+	    Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: added option to collection");
             if (CheckRemainingSize(packet, 1) == NS_FALSE) {
-		Ns_Log(Debug, "ParseCoapMessage: no further options/payload");
+		Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: no further options/payload");
                 processOptions = 0;
             }
         }
-	Ns_Log(Debug, "ParseCoapMessage: finished parsing option/payload");
+	Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: finished parsing option/payload");
     }
 
     return coap->valid;
@@ -813,7 +818,7 @@ static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http) {
         }
     }
 
-    Ns_Log(Debug, "Coap2Http: finished; processed %d CoAP options", coap->optionCount);
+    Ns_Log(Ns_LogCoapDebug, "Coap2Http: finished; processed %d CoAP options", coap->optionCount);
     return success;
 }
 
@@ -848,7 +853,7 @@ static bool Http2Coap(HttpRep_t *http, CoapMsg_t *coap, CoapParams_t *params)
 
     coap->version       = 1;
     coap->codeValue     = http->status;
-    Ns_Log(Debug, "Http2Coap: finished; HTTP status: %u", http->status);
+    Ns_Log(Ns_LogCoapDebug, "Http2Coap: finished; HTTP status: %u", http->status);
 
     coap->payload       = http->payload;
     coap->payloadLength = http->payloadLength;
@@ -878,7 +883,7 @@ static bool SerializeHttp(HttpReq_t *http, Packet_t *packet)
 	   (size_t)Ns_DStringLength(&request));
     packet->size = Ns_DStringLength(&request);
 
-    Ns_Log(Debug, "SerializeHttp: finished; HTTP output:\n%s", Ns_DStringValue(&request));
+    Ns_Log(Ns_LogCoapDebug, "SerializeHttp: finished; HTTP output:\n%s", Ns_DStringValue(&request));
 
     return NS_TRUE;
 }
@@ -926,7 +931,7 @@ static bool ParseHttp(Packet_t *packet, HttpRep_t *http)
     }
     
     Ns_DStringFree(&headerLine);
-    Ns_Log(Debug, "ParseHttp: finished; headers: %d, payload length: %u, packet size: %u",
+    Ns_Log(Ns_LogCoapDebug, "ParseHttp: finished; headers: %d, payload length: %u, packet size: %u",
            (int)http->headers->size, http->payloadLength, packet->size);
 
     return NS_TRUE;
