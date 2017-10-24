@@ -322,7 +322,6 @@ Close(Ns_Sock *sock)
     Packet_t *pin = ns_calloc(1u, sizeof(Packet_t));
     Packet_t *pout = ns_calloc(1u, sizeof(Packet_t));    
     struct sockaddr *saPtr = (struct sockaddr *)&(sock->sa);
-    char ipString[NS_IPADDR_SIZE];
 
     if (cp != NULL && cp->sendbuf != NULL) {
         sendbuf = cp->sendbuf;
@@ -346,10 +345,12 @@ Close(Ns_Sock *sock)
     len = sendto(sock->sock, pout->raw, (size_t)pout->size, 0,
                  saPtr, Ns_SockaddrGetSockLen(saPtr));
     if (len == -1) {
+        char ipString[NS_IPADDR_SIZE];
+
         Ns_Log(Error, "Close: FD %d: sendto %d bytes to %s: %s", 
-        sock->sock, pout->size, 
-        ns_inet_ntop(saPtr, ipString, sizeof(ipString)),
-        strerror(errno));
+               sock->sock, pout->size, 
+               ns_inet_ntop(saPtr, ipString, sizeof(ipString)),
+               strerror(errno));
     } else {
         Ns_Log(Ns_LogCoapDebug, "Close: sent %" PRIdz " bytes", len);
     }
@@ -944,7 +945,7 @@ static bool ParseHttp(Packet_t *packet, HttpRep_t *http)
  * Construct a CoAP message from a CoAP object.
  */
 static bool SerializeCoap (CoapMsg_t *coap, Packet_t *packet) {
-    int delta, dlpos, o, maxlen, pdelta = 0, pos;
+    int       delta, o, pdelta = 0, pos;
     Option_t *opt;
 
     /* Mandatory headers */
@@ -959,6 +960,8 @@ static bool SerializeCoap (CoapMsg_t *coap, Packet_t *packet) {
 
     /* Options */
     for (o = 0; o < coap->optionCount; o++) {
+        int dlpos;
+
         opt = coap->options[o];
         /* Option code */
         delta = opt->delta - pdelta;
@@ -995,6 +998,8 @@ static bool SerializeCoap (CoapMsg_t *coap, Packet_t *packet) {
 
     /* Payload marker + payload */
     if (coap->payloadLength > 0) {
+        int maxlen;
+
         packet->raw[pos++] = 0xffu;
         maxlen = MAX_COAP_SIZE - pos;
         maxlen = coap->payloadLength > maxlen ? maxlen : coap->payloadLength;
