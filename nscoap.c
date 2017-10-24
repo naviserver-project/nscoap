@@ -67,11 +67,13 @@ NS_EXPORT int Ns_ModuleInit(const char *server, const char *module)
 {
     const char *path;
     CoapDriver *drvPtr;
-    Ns_DriverInitData init = {0};
+    Ns_DriverInitData init;
 
     path = Ns_ConfigGetPath(server, module, (char *)0);
     drvPtr = ns_calloc(1, sizeof(CoapDriver));
     drvPtr->packetsize = Ns_ConfigIntRange(path, "packetsize", -1, -1, INT_MAX);
+
+    memset(&init, 0, sizeof(init));
     init.version = NS_DRIVER_VERSION_4;
     init.name = "nscoap";
     init.listenProc = Listen;
@@ -122,7 +124,7 @@ CoapInterpInit(Tcl_Interp *interp, const void *arg)
  */
 
 static NS_SOCKET
-Listen(Ns_Driver *driver, const char *address, unsigned short port, int backlog, bool reuseport)
+Listen(Ns_Driver *UNUSED(driver), const char *address, unsigned short port, int UNUSED(backlog), bool reuseport)
 {
     NS_SOCKET sock;
 
@@ -152,7 +154,7 @@ Listen(Ns_Driver *driver, const char *address, unsigned short port, int backlog,
  
 static NS_DRIVER_ACCEPT_STATUS
 Accept(Ns_Sock *sock, NS_SOCKET listensock,
-       struct sockaddr *saPtr, socklen_t *socklenPtr)
+       struct sockaddr *UNUSED(saPtr), socklen_t *UNUSED(socklenPtr))
 {
     sock->sock = listensock;
     return NS_DRIVER_ACCEPT_DATA;
@@ -176,8 +178,8 @@ Accept(Ns_Sock *sock, NS_SOCKET listensock,
  */
 
 static ssize_t
-Recv(Ns_Sock *sock, struct iovec *bufs, int nbufs,
-     Ns_Time *timeoutPtr, unsigned int flags)
+Recv(Ns_Sock *sock, struct iovec *bufs, int UNUSED(nbufs),
+     Ns_Time *UNUSED(timeoutPtr), unsigned int UNUSED(flags))
 {
      CoapMsg_t *coap = InitCoapMsg();
      HttpReq_t *http = ns_calloc(1u, sizeof(HttpReq_t));
@@ -243,7 +245,7 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int nbufs,
 
 static ssize_t
 Send(Ns_Sock *sock, const struct iovec *bufs, int nbufs,
-     const Ns_Time *timeoutPtr, unsigned int flags)
+     const Ns_Time *UNUSED(timeoutPtr), unsigned int UNUSED(flags))
 {
     int nbuf, size;
     CoapParams_t *cp = sock->arg;
@@ -285,7 +287,7 @@ Send(Ns_Sock *sock, const struct iovec *bufs, int nbufs,
  */
 
 static bool
-Keep(Ns_Sock *sock)
+Keep(Ns_Sock *UNUSED(sock))
 {
     return NS_FALSE;
 }
@@ -365,7 +367,7 @@ Close(Ns_Sock *sock)
 
 
 static int
-CoapObjCmd(ClientData arg, Tcl_Interp *interp, int objc, Tcl_Obj *CONST* objv)
+CoapObjCmd(ClientData UNUSED(clientData), Tcl_Interp *interp, int objc, Tcl_Obj *CONST* objv)
 {
     fd_set fds;
     unsigned char buf[16384];
