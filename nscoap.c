@@ -313,53 +313,56 @@ Keep(Ns_Sock *UNUSED(sock))
 static void
 Close(Ns_Sock *sock)
 {
-    CoapMsg_t *coap = InitCoapMsg();
-    HttpRep_t *http = ns_calloc(1u, sizeof(HttpRep_t));
     CoapParams_t *cp = sock->arg;
-    Ns_DString *sendbuf;
-    int plen = 0, sendbuflen = 0;
-    ssize_t len;
-    Packet_t *pin = ns_calloc(1u, sizeof(Packet_t));
-    Packet_t *pout = ns_calloc(1u, sizeof(Packet_t));    
-    struct sockaddr *saPtr = (struct sockaddr *)&(sock->sa);
 
-    if (cp != NULL && cp->sendbuf != NULL) {
+    Ns_Log(Ns_LogCoapDebug, "Close %d", sock->sock);
+
+    if (cp == NULL || cp->sendbuf == NULL) {
+        Ns_Log(Ns_LogCoapDebug, "Close: exiting; missing coap socket args or send buffer");
+    } else {
+        CoapMsg_t  *coap = InitCoapMsg();
+        HttpRep_t  *http = ns_calloc(1u, sizeof(HttpRep_t));
+        Packet_t   *pin = ns_calloc(1u, sizeof(Packet_t));
+        Packet_t   *pout = ns_calloc(1u, sizeof(Packet_t));
+        int         plen = 0, sendbuflen = 0;
+        Ns_DString *sendbuf;
+
         sendbuf = cp->sendbuf;
         sendbuflen = Ns_DStringLength(sendbuf);
-    } else {
-        Ns_Log(Ns_LogCoapDebug, "Close: exiting; missing coap socket args or send buffer");
-        return;
+
+        /* Continue using reasonable size */
+        plen = sendbuflen > MAX_PACKET_SIZE ? MAX_PACKET_SIZE : sendbuflen;
+        memcpy(pin->raw, sendbuf->string, plen);
+        pin->size = plen;
+
+        if (!ParseHttp(pin, http)
+            || !Http2Coap(http, coap, cp)
+            || !SerializeCoap(coap, pout)) {
+            Ns_Log(Error, "Close: exiting; proxy/parse failed, nothing sent");
+        } else {
+            ssize_t len;
+            struct sockaddr *saPtr = (struct sockaddr *)&(sock->sa);
+
+            len = sendto(sock->sock, pout->raw, (size_t)pout->size, 0,
+                         saPtr, Ns_SockaddrGetSockLen(saPtr));
+            if (len == -1) {
+                char ipString[NS_IPADDR_SIZE];
+
+                Ns_Log(Error, "Close: FD %d: sendto %d bytes to %s: %s",
+                       sock->sock, pout->size,
+                       ns_inet_ntop(saPtr, ipString, sizeof(ipString)),
+                       strerror(errno));
+            } else {
+                Ns_Log(Ns_LogCoapDebug, "Close: sent %" PRIdz " bytes", len);
+            }
+        }
+
+        ns_free(coap);
+        ns_free(http);
+        ns_free(pin);
+        ns_free(pout);
+        Ns_DStringFree(sendbuf);
     }
-
-    /* Continue using reasonable size */
-    plen = sendbuflen > MAX_PACKET_SIZE ? MAX_PACKET_SIZE : sendbuflen;
-    memcpy(pin->raw, sendbuf->string, plen);
-    pin->size = plen;
-
-    if (!ParseHttp(pin, http)
-        || !Http2Coap(http, coap, cp)
-        || !SerializeCoap(coap, pout)) {       
-        Ns_Log(Error, "Close: exiting; proxy/parse failed, nothing sent");
-        return;
-    }
-    len = sendto(sock->sock, pout->raw, (size_t)pout->size, 0,
-                 saPtr, Ns_SockaddrGetSockLen(saPtr));
-    if (len == -1) {
-        char ipString[NS_IPADDR_SIZE];
-
-        Ns_Log(Error, "Close: FD %d: sendto %d bytes to %s: %s", 
-               sock->sock, pout->size, 
-               ns_inet_ntop(saPtr, ipString, sizeof(ipString)),
-               strerror(errno));
-    } else {
-        Ns_Log(Ns_LogCoapDebug, "Close: sent %" PRIdz " bytes", len);
-    }
-
-    ns_free(coap);
-    ns_free(http);
-    ns_free(pin);
-    ns_free(pout);
-    Ns_DStringFree(sendbuf);
     sock->arg = NULL;
     sock->sock = NS_INVALID_SOCKET;
 
