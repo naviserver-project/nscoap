@@ -195,10 +195,13 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int UNUSED(nbufs),
      Packet_t *pout = ns_calloc(1u, sizeof(Packet_t));
      CoapParams_t *cp = sock->arg;
      ssize_t msgsize;
-     socklen_t socklen;
+     socklen_t        socklen = (socklen_t)sizeof(struct NS_SOCKADDR_STORAGE);
+     struct sockaddr *saPtr = (struct sockaddr *)&(sock->sa);
 
      msgsize = recvfrom(sock->sock, pin->raw, bufs->iov_len, 0,
-			(struct sockaddr *)&(sock->sa), &socklen);
+			saPtr, &socklen);
+     Ns_LogSockaddr(Ns_LogCoapDebug, "Recv", saPtr);
+     Ns_Log(Ns_LogCoapDebug, "Recv sock %d socken %u msgSize %lu", sock->sock, socklen, msgsize);
 
      /*
       * Provide the actual size of the buffer since the structure is not
@@ -324,17 +327,19 @@ Close(Ns_Sock *sock)
     CoapParams_t *cp = sock->arg;
 
     Ns_Log(Ns_LogCoapDebug, "Close %d", sock->sock);
-    //{char *p = NULL; *p = 0;}
 
     if (cp == NULL || cp->sendbuf == NULL) {
         Ns_Log(Ns_LogCoapDebug, "Close: exiting; missing coap socket args or send buffer");
     } else {
-        CoapMsg_t  *coap = InitCoapMsg();
-        HttpRep_t  *http = ns_calloc(1u, sizeof(HttpRep_t));
-        Packet_t   *pin = ns_calloc(1u, sizeof(Packet_t));
-        Packet_t   *pout = ns_calloc(1u, sizeof(Packet_t));
-        int         plen = 0, sendbuflen = 0;
-        Ns_DString *sendbuf;
+        CoapMsg_t       *coap = InitCoapMsg();
+        HttpRep_t       *http = ns_calloc(1u, sizeof(HttpRep_t));
+        Packet_t        *pin = ns_calloc(1u, sizeof(Packet_t));
+        Packet_t        *pout = ns_calloc(1u, sizeof(Packet_t));
+        int              plen = 0, sendbuflen = 0;
+        Ns_DString      *sendbuf;
+        struct sockaddr *saPtr = (struct sockaddr *)&(sock->sa);
+
+        Ns_LogSockaddr(Ns_LogCoapDebug, "Close", saPtr);
 
         sendbuf = cp->sendbuf;
         sendbuflen = Ns_DStringLength(sendbuf);
@@ -350,7 +355,6 @@ Close(Ns_Sock *sock)
             Ns_Log(Error, "Close: exiting; proxy/parse failed, nothing sent");
         } else {
             ssize_t len;
-            struct sockaddr *saPtr = (struct sockaddr *)&(sock->sa);
 
             len = sendto(sock->sock, pout->raw, (size_t)pout->size, 0,
                          saPtr, Ns_SockaddrGetSockLen(saPtr));
