@@ -316,6 +316,7 @@ Close(Ns_Sock *sock)
     CoapParams_t *cp = sock->arg;
 
     Ns_Log(Ns_LogCoapDebug, "Close %d", sock->sock);
+    //{char *p = NULL; *p = 0;}
 
     if (cp == NULL || cp->sendbuf == NULL) {
         Ns_Log(Ns_LogCoapDebug, "Close: exiting; missing coap socket args or send buffer");
@@ -364,6 +365,7 @@ Close(Ns_Sock *sock)
         Ns_DStringFree(sendbuf);
     }
     sock->arg = NULL;
+    Ns_Log(Ns_LogCoapDebug, "Close sets socket %d to INVALID SOCKET", sock->sock);
     sock->sock = NS_INVALID_SOCKET;
 
     return;
@@ -895,11 +897,35 @@ static bool SerializeHttp(HttpReq_t *http, Packet_t *packet)
 }
 
 
+#if 1
+static bool ParseHttp(Packet_t *packet, HttpRep_t *http)
+{
+    Ns_ReturnCode status;
+
+    Ns_Log(Ns_LogCoapDebug, "ParseHttp started <%s>", packet->raw);
+
+    http->headers = Ns_SetCreate("headers");
+    status = Ns_HttpMessageParse((char *)packet->raw, packet->size,
+                                 http->headers,
+                                 NULL, NULL,
+                                 &http->status,
+                                 (char **)&http->payload);
+
+    http->payloadLength = (packet->size - (int)(http->payload - packet->raw));
+
+    Ns_Log(Ns_LogCoapDebug, "ParseHttp: finished; headers: %d, payload length: %u, packet size: %u",
+           (int)http->headers->size, http->payloadLength, packet->size);
+
+    return NS_TRUE;
+}
+#else
 static bool ParseHttp(Packet_t *packet, HttpRep_t *http)
 {
     int         pos, lineStart;
     char        status[4];
     Ns_DString  headerLine;
+
+    Ns_Log(Ns_LogCoapDebug, "ParseHttp started <%s>", packet->raw);
 
     /* Save status code */
     memcpy(&status[0], &packet->raw[9], 3);
@@ -942,6 +968,7 @@ static bool ParseHttp(Packet_t *packet, HttpRep_t *http)
 
     return NS_TRUE;
 }
+#endif
 
 
 /*
