@@ -60,6 +60,14 @@
 NS_EXPORT int Ns_ModuleVersion = 1;
 NS_EXPORT Ns_ModuleInitProc Ns_ModuleInit;
 
+/*
+ * Static functions defined in this file.
+ */
+static Ns_ReturnCode ParseHttp(Packet_t *packet, HttpRep_t *http);
+
+/*
+ * Static variables defined in this file.
+ */
 static Ns_LogSeverity Ns_LogCoapDebug;
 
 
@@ -336,7 +344,7 @@ Close(Ns_Sock *sock)
         memcpy(pin->raw, sendbuf->string, plen);
         pin->size = plen;
 
-        if (!ParseHttp(pin, http)
+        if (ParseHttp(pin, http) != NS_OK
             || !Http2Coap(http, coap, cp)
             || !SerializeCoap(coap, pout)) {
             Ns_Log(Error, "Close: exiting; proxy/parse failed, nothing sent");
@@ -898,7 +906,7 @@ static bool SerializeHttp(HttpReq_t *http, Packet_t *packet)
 
 
 #if 1
-static bool ParseHttp(Packet_t *packet, HttpRep_t *http)
+static Ns_ReturnCode ParseHttp(Packet_t *packet, HttpRep_t *http)
 {
     Ns_ReturnCode status;
 
@@ -916,10 +924,10 @@ static bool ParseHttp(Packet_t *packet, HttpRep_t *http)
     Ns_Log(Ns_LogCoapDebug, "ParseHttp: finished; headers: %d, payload length: %u, packet size: %u",
            (int)http->headers->size, http->payloadLength, packet->size);
 
-    return NS_TRUE;
+    return status;
 }
 #else
-static bool ParseHttp(Packet_t *packet, HttpRep_t *http)
+static Ns_ReturnCode ParseHttp(Packet_t *packet, HttpRep_t *http)
 {
     int         pos, lineStart;
     char        status[4];
@@ -966,7 +974,7 @@ static bool ParseHttp(Packet_t *packet, HttpRep_t *http)
     Ns_Log(Ns_LogCoapDebug, "ParseHttp: finished; headers: %d, payload length: %u, packet size: %u",
            (int)http->headers->size, http->payloadLength, packet->size);
 
-    return NS_TRUE;
+    return NS_OK;
 }
 #endif
 
