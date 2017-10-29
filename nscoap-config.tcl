@@ -34,6 +34,7 @@ ns_param        nssock              nssock.so
 ns_param        nslog               nslog.so
 ns_param        nscgi               nscgi.so
 ns_param        nsdb                nsdb.so
+ns_param        nscoap              nscoap.so
 
 ns_section     "ns/parameters"
 ns_param        home                $home
@@ -194,6 +195,10 @@ ns_param        address             $address
 
 ns_section     "ns/server/default/module/nscp/users"
 ns_param        user                "::"
+
+ns_section     "ns/server/default/module/nscoap"
+ns_param        address             0.0.0.0
+ns_param        port                5683
 
 #
 # For debugging, you might activate one of the following flags
