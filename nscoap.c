@@ -64,6 +64,7 @@ NS_EXPORT Ns_ModuleInitProc Ns_ModuleInit;
  * Static functions defined in this file.
  */
 static Ns_ReturnCode ParseHttp(Packet_t *packet, HttpRep_t *http);
+static bool CheckRemainingSize(Packet_t *packet, size_t increment);
 
 /*
  * Static variables defined in this file.
@@ -190,7 +191,6 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int UNUSED(nbufs),
      Ns_Time *UNUSED(timeoutPtr), unsigned int UNUSED(flags))
 {
     CoapMsg_t        coap;
-    HttpReq_t        http;
     Packet_t         pin;
     CoapParams_t    *cp = sock->arg;
     ssize_t          msgsize;
@@ -209,28 +209,53 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int UNUSED(nbufs),
      * initialized (no address familiy is known).
      */
     socklen = (socklen_t)sizeof(sock->sa);
-    pin.size = (int)msgsize;
 
     if (msgsize > 0) {
-        Packet_t pout;
+        pin.size = (size_t)msgsize;
 
         if (cp == NULL) {
             cp = ns_calloc(1u, sizeof(CoapParams_t));
             sock->arg = cp;
         }
         memset(&coap, 0, sizeof(coap));
-        memset(&http, 0, sizeof(http));
-        memset(&pout, 0, sizeof(pout));
 
-        if (!ParseCoap(&pin, &coap, cp)
-            || !Coap2Http(&coap, &http)
-            || !SerializeHttp(&http, &pout)) {
-            Ns_Log(Error, "Recv: finished; parse/proxy failed");
-            return -1;
+        if (ParseCoap(&pin, &coap, cp)) {
+            Packet_t  pout;
+            HttpReq_t http;
+
+            memset(&http, 0, sizeof(http));
+            memset(&pout, 0, sizeof(pout));
+
+            Ns_Log(Ns_LogCoapDebug, "Recv: parsed coap %" PRIdz " bytes #options %u", msgsize, coap.optionCount);
+            if (coap.optionCount > 0) {
+                Ns_Log(Ns_LogCoapDebug, "Recv: coap: option[0] <%s>", coap.options[0]->value);
+            }
+
+            if (Coap2Http(&coap, &http)
+                && SerializeHttp(&http, &pout)
+                ) {
+                /*
+                 * Pass content to HTTP backend
+                 */
+                Ns_Log(Ns_LogCoapDebug, "Recv: overwrite receive buffer old length %lu new length %lu",
+                       bufs->iov_len, pout.size);
+                /*
+                 * Make sure, that we can indeed copy the content to this
+                 * buffer without globbering memory.
+                 */
+                assert(bufs->iov_len > pout.size);
+
+                memcpy(bufs->iov_base, pout.raw, (size_t)pout.size);
+                msgsize = (ssize_t)pout.size;
+                Ns_Log(Ns_LogCoapDebug, "Recv: passed to HTTP backend; processed %" PRIdz " bytes", msgsize);
+            } else {
+                Ns_Log(Error, "Recv: could not parse coap to HTTP");
+                msgsize = -1;
+            }
+        } else {
+            Ns_Log(Warning, "Recv: could not parse coap package");
+            msgsize = -1;
         }
-        memcpy(bufs->iov_base, pout.raw, (size_t)pout.size);
-        msgsize = (ssize_t)pout.size;
-        Ns_Log(Ns_LogCoapDebug, "Recv: finished; processed %" PRIdz " bytes", msgsize);
     } else {
         Ns_Log(Ns_LogCoapDebug, "Recv: finished; no data received");
     }
@@ -336,7 +361,7 @@ Close(Ns_Sock *sock)
         CoapMsg_t        coap;
         HttpRep_t        http;
         Packet_t         pin, pout;
-        int              plen, sendbuflen;
+        size_t           plen, sendbuflen;
         Ns_DString      *sendbuf;
         struct sockaddr *saPtr = (struct sockaddr *)&(sock->sa);
 
@@ -348,7 +373,7 @@ Close(Ns_Sock *sock)
         Ns_LogSockaddr(Ns_LogCoapDebug, "Close", saPtr);
 
         sendbuf = cp->sendbuf;
-        sendbuflen = Ns_DStringLength(sendbuf);
+        sendbuflen = (size_t)Ns_DStringLength(sendbuf);
 
         /* Continue using reasonable size */
         plen = sendbuflen > MAX_PACKET_SIZE ? MAX_PACKET_SIZE : sendbuflen;
@@ -367,7 +392,7 @@ Close(Ns_Sock *sock)
             if (len == -1) {
                 char ipString[NS_IPADDR_SIZE];
 
-                Ns_Log(Error, "Close: FD %d: sendto %d bytes to %s: %s",
+                Ns_Log(Error, "Close: FD %d: sendto %lu bytes to %s: %s",
                        sock->sock, pout.size,
                        ns_inet_ntop(saPtr, ipString, sizeof(ipString)),
                        strerror(errno));
@@ -523,12 +548,14 @@ done:
  *
  * Returns a boolean value indicating whether the remaining size >= increment.
  */
-static bool CheckRemainingSize(Packet_t *packet, int increment)
+static bool CheckRemainingSize(Packet_t *packet, size_t increment)
 {
-    bool success = NS_TRUE;
+    bool success;
 
     if ((packet->position + increment) > packet->size) {
         success = NS_FALSE;
+    } else {
+        success = NS_TRUE;
     }
 
     return success;
@@ -541,7 +568,7 @@ static bool CheckRemainingSize(Packet_t *packet, int increment)
  * Returns a boolean value indicating success.
  */
 static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
-    Option_t   *option;
+    Option_t   *optionPtr;
     int         i, codeValue, lastOptionNumber = 0;
     bool        processOptions;
     Code_t      code;
@@ -557,9 +584,9 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
     packet->position = 0;
     coap->valid = NS_TRUE;
 
-    Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: packet length: %d", packet->size);
+    Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: packet length: %lu", packet->size);
     /* CoAP messages can't be shorter than 4 bytes */
-    if (CheckRemainingSize(packet, 4) == NS_FALSE) {
+    if (CheckRemainingSize(packet, 4u) == NS_FALSE) {
         Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: message shorter than 4 bytes");
         return NS_FALSE;
     }
@@ -615,7 +642,7 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
     /* Bit 32ff: Token */
     packet->position = 4;
     if (coap->tokenLength > 0) {
-        if (CheckRemainingSize(packet, (int)coap->tokenLength) == NS_TRUE) {
+        if (CheckRemainingSize(packet, coap->tokenLength) == NS_TRUE) {
             memcpy(coap->token, &(packet->raw[4]), coap->tokenLength);
             memcpy(params->token, coap->token, coap->tokenLength);
             params->tokenLength = coap->tokenLength;
@@ -630,9 +657,9 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
      * Options. Option Numbers are maintained in the "CoAP Option Numbers"
      * registry.
      */
-    processOptions = CheckRemainingSize(packet, 1);
+    processOptions = CheckRemainingSize(packet, 1u);
 
-    while (processOptions == 1) {
+    while (processOptions) {
         /*
          * Option Bits:
          *    0-3: Option Delta
@@ -642,19 +669,21 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
          *    Option Length extended (8 bit, when length is 0x0d; 16 bit, when length is 0x0e)
          *    Option Value
          */
-        option = ns_malloc(sizeof(Option_t));
-        bzero(option, sizeof(Option_t));
-        option->delta = ((packet->raw[packet->position] >> 4) & 0x0fu);
-        option->length = (packet->raw[packet->position] & 0x0fu);
+        optionPtr = ns_malloc(sizeof(Option_t));
+
+        optionPtr->delta = ((packet->raw[packet->position] >> 4) & 0x0fu);
+        optionPtr->length = (packet->raw[packet->position] & 0x0fu);
+        optionPtr->value = NULL;
+
         packet->position++;
-        Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: processing option: number delta = %u, length = %u",
-               option->delta, option->length);
+        Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: processing option: number delta %u, length %u, option #%d",
+               optionPtr->delta, optionPtr->length, coap->optionCount);
 
         /* Parse option delta */
-        switch (option->delta) {
+        switch (optionPtr->delta) {
         case 0x0fu:
             /* Payload marker or invalid */
-            switch (option->length) {
+            switch (optionPtr->length) {
             case 0x0fu:
                     coap->payload = &(packet->raw[packet->position]);
                     coap->payloadLength = packet->size - packet->position;
@@ -665,12 +694,12 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
                     coap->valid = NS_FALSE;
                     break;
             }
-            processOptions = 0;
+            processOptions = NS_FALSE;
             break;
 
         case 0x0eu:
-            if (CheckRemainingSize(packet, 2) == NS_TRUE) {
-                option->delta =
+            if (CheckRemainingSize(packet, 2u) == NS_TRUE) {
+                optionPtr->delta =
                     ((unsigned int) packet->raw[packet->position] << 8) +
                     ((unsigned int) packet->raw[packet->position + 1] + 269);
                 packet->position += 2;
@@ -678,8 +707,8 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
             break;
 
         case 0x0du:
-            if (CheckRemainingSize(packet, 1) == NS_TRUE) {
-                option->delta = ((unsigned int) packet->raw[packet->position] + 13);
+            if (CheckRemainingSize(packet, 1u) == NS_TRUE) {
+                optionPtr->delta = ((unsigned int) packet->raw[packet->position] + 13);
                 packet->position += 1;
             }
             break;
@@ -689,20 +718,20 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
         }
 
         /* No payload, process length */
-        if (processOptions == 1) {
-            option->delta += lastOptionNumber;
-            lastOptionNumber = option->delta;
+        if (processOptions) {
+            optionPtr->delta += lastOptionNumber;
+            lastOptionNumber = optionPtr->delta;
             Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: final option number = %u",
-                   option->delta);
-            switch (option->length) {
+                   optionPtr->delta);
+            switch (optionPtr->length) {
             case 0x0fu:
                 coap->valid = NS_FALSE;
-                processOptions = 0;
+                processOptions = NS_FALSE;
                 break;
 
             case 0x0eu:
-                if (CheckRemainingSize(packet, 2) == NS_TRUE) {
-                    option->length =
+                if (CheckRemainingSize(packet, 2u) == NS_TRUE) {
+                    optionPtr->length =
                         ((unsigned int)packet->raw[packet->position] << 8) +
                         ((unsigned int)packet->raw[packet->position + 1] + 269);
                     packet->position += 2;
@@ -710,8 +739,8 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
                 break;
 
             case 0x0du:
-                if (CheckRemainingSize(packet, 1) == NS_TRUE) {
-                    option->length = ((unsigned int)packet->raw[packet->position] + 13);
+                if (CheckRemainingSize(packet, 1u) == NS_TRUE) {
+                    optionPtr->length = ((unsigned int)packet->raw[packet->position] + 13);
                     packet->position += 1;
                 }
                 break;
@@ -720,28 +749,33 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
                 break;
             }
             Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: final option length = %u",
-                   option->length);
+                   optionPtr->length);
         }
 
-        if (processOptions == 1) {
-            if (option->length > 0) {
-                if (CheckRemainingSize(packet, option->length) == NS_TRUE) {
-                    option->value = &(packet->raw[packet->position]);
-                    packet->position += option->length;
+        if (processOptions) {
+            if (optionPtr->length > 0) {
+                if (CheckRemainingSize(packet, optionPtr->length) == NS_TRUE) {
+                    optionPtr->value = &(packet->raw[packet->position]);
+                    packet->position += optionPtr->length;
                 } else {
                     coap->valid = NS_FALSE;
-                    processOptions = 0;
+                    processOptions = NS_FALSE;
                 }
             }
         }
-        if (processOptions == 1) {
+        if (processOptions) {
 
             /* Append option to collection */
-            coap->options[coap->optionCount++] = option;
+            //coap->optionCount++;
+            Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage:COPY %p delta %u length %u value %s pos %d",
+                   (void*)optionPtr, optionPtr->delta, optionPtr->length,  optionPtr->value, coap->optionCount);
+
+            coap->options[coap->optionCount++] = optionPtr;
+
             Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: added option to collection");
-            if (CheckRemainingSize(packet, 1) == NS_FALSE) {
+            if (CheckRemainingSize(packet, 1u) == NS_FALSE) {
                 Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: no further options/payload");
-                processOptions = 0;
+                processOptions = NS_FALSE;
             }
         }
         Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: finished parsing option/payload");
@@ -816,7 +850,9 @@ static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http) {
          *   15  URI query
          */
         if (coap->options[opt]->delta & 0x3u) {
-            Ns_DStringNAppend(rawvalPtr, (char *) (coap->options[opt]->value), coap->options[opt]->length);
+            Ns_DStringNAppend(rawvalPtr,
+                              (char *)(coap->options[opt]->value),
+                              (int)coap->options[opt]->length);
             if (coap->options[opt]->delta < 4) {
                 /* Hosts are not being transcoded from UTF-8 to %-encoding yet (method missing) */
                 Ns_DStringNAppend(&http->host, rawvalPtr->string, rawvalPtr->length);
@@ -897,12 +933,11 @@ static bool SerializeHttp(HttpReq_t *http, Packet_t *packet)
                      http->method, Ns_DStringValue(&http->path),
                      Ns_DStringValue(&http->query), HTTP_VERSION);
     //Ns_DStringPrintf(&request, "Host: %s\n", Ns_DStringValue(&(http->host)));
-    Ns_DStringPrintf(&request, "Content-Length: 0\r\n");
-    Ns_DStringPrintf(&request, "\r\n");
+    Ns_DStringPrintf(&request, "Content-Length: 0\r\n\r\n");
     memcpy(packet->raw,
            Ns_DStringValue(&request),
            (size_t)Ns_DStringLength(&request));
-    packet->size = Ns_DStringLength(&request);
+    packet->size = (size_t)Ns_DStringLength(&request);
 
     Ns_Log(Ns_LogCoapDebug, "SerializeHttp: finished; HTTP output:\n%s", Ns_DStringValue(&request));
 
@@ -926,7 +961,7 @@ static Ns_ReturnCode ParseHttp(Packet_t *packet, HttpRep_t *http)
 
     http->payloadLength = (packet->size - (int)(http->payload - packet->raw));
 
-    Ns_Log(Ns_LogCoapDebug, "ParseHttp: finished; headers: %d, payload length: %u, packet size: %u",
+    Ns_Log(Ns_LogCoapDebug, "ParseHttp: finished; headers: %d, payload length: %u, packet size: %lu",
            (int)http->headers->size, http->payloadLength, packet->size);
 
     return status;
@@ -989,7 +1024,7 @@ static Ns_ReturnCode ParseHttp(Packet_t *packet, HttpRep_t *http)
  */
 static bool SerializeCoap (CoapMsg_t *coap, Packet_t *packet) {
     int       delta, o, pdelta = 0, pos;
-    Option_t *opt;
+    Option_t *optionsPtr;
 
     /* Mandatory headers */
     packet->raw[0] = (byte)((coap->version << 6) |
@@ -1005,10 +1040,10 @@ static bool SerializeCoap (CoapMsg_t *coap, Packet_t *packet) {
     for (o = 0; o < coap->optionCount; o++) {
         int dlpos;
 
-        opt = coap->options[o];
+        optionsPtr = coap->options[o];
         /* Option code */
-        delta = opt->delta - pdelta;
-        pdelta = opt->delta;
+        delta = optionsPtr->delta - pdelta;
+        pdelta = optionsPtr->delta;
         dlpos = pos++;
         if (delta > 268) {
             packet->raw[dlpos] = (0xeu << 4);
@@ -1024,18 +1059,18 @@ static bool SerializeCoap (CoapMsg_t *coap, Packet_t *packet) {
             packet->raw[dlpos] = (byte)(delta << 4);
         }
         /* Option length */
-        if (opt->length > 268) {
+        if (optionsPtr->length > 268) {
             packet->raw[dlpos] |= 0xeu;
             delta -= 269;
-            memcpy(&packet->raw[pos], &opt->length, 2);
+            memcpy(&packet->raw[pos], &optionsPtr->length, 2);
             pos += 2;
-        } else if (opt->length > 12) {
+        } else if (optionsPtr->length > 12) {
             packet->raw[dlpos] |= 0xdu;
             delta -= 13;
-            memcpy(&packet->raw[pos], &opt->length, 1);
+            memcpy(&packet->raw[pos], &optionsPtr->length, 1);
             pos += 1;
         } else {
-            packet->raw[dlpos] |= (opt->length & 0xfu);
+            packet->raw[dlpos] |= (optionsPtr->length & 0xfu);
         }
     }
 
@@ -1050,7 +1085,7 @@ static bool SerializeCoap (CoapMsg_t *coap, Packet_t *packet) {
         pos += maxlen;
     }
 
-    packet->size = pos;
+    packet->size = (size_t)pos;
 
     return NS_TRUE;
 }

@@ -72,8 +72,8 @@ typedef struct HttpRep_s
 typedef struct Packet_s
 {
     byte        raw[MAX_PACKET_SIZE];   /* holds the raw packet bytes */
-    int         position;               /* current parser position */
-    int         size;                   /* size in bytes */
+    size_t      position;               /* current parser position */
+    size_t      size;                   /* size in bytes */
 } Packet_t;
 
 /* Driver parameters */
