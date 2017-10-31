@@ -71,7 +71,7 @@ typedef struct HttpRep_s
 /* Raw packet bytes (L4 payload) */
 typedef struct Packet_s
 {
-    byte        raw[MAX_PACKET_SIZE];   /* holds the raw packet bytes */
+    byte       *raw;                    /* holds the raw packet bytes */
     size_t      position;               /* current parser position */
     size_t      size;                   /* size in bytes */
 } Packet_t;
@@ -89,11 +89,13 @@ typedef struct CoapParams_s
     int          messageID;              /* message ID (for req/ack matching) */
     byte         token[8];               /* CoAP token */
     size_t       tokenLength;            /* token length */
+    unsigned int flags;
 } CoapParams_t;
+
+#define NSCOAP_FLAG_ALREADY_HANDLED 0x01u
 
 /* Locally defined functions */
 static bool SerializeCoap(CoapMsg_t *coap, Packet_t *packet);
-static bool SerializeHttp(HttpReq_t *http, Packet_t *packet);
 static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params);
 static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http);
 static bool Http2Coap(HttpRep_t *http, CoapMsg_t *coap, CoapParams_t *params);

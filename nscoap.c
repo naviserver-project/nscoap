@@ -60,28 +60,90 @@
 NS_EXPORT int Ns_ModuleVersion = 1;
 NS_EXPORT Ns_ModuleInitProc Ns_ModuleInit;
 
+#define NSCOAP_ARRAY_NAME "nscoap"
+
 /*
  * Static functions defined in this file.
  */
 static Ns_ReturnCode ParseHttp(Packet_t *packet, HttpRep_t *http);
 static bool CheckRemainingSize(Packet_t *packet, size_t increment);
+static void CoapSentError(Ns_Sock *sock, size_t len);
+static bool SerializeHttp(HttpReq_t *http, Tcl_DString *dsPtr);
 
 /*
  * Static variables defined in this file.
  */
 static Ns_LogSeverity Ns_LogCoapDebug;
+static Tcl_Encoding UTF8_Encoding = NULL;
+static int coapKey = -1;
 
+/*
+ * Function Definitions
+ */
 
 NS_EXPORT int Ns_ModuleInit(const char *server, const char *module)
 {
-    const char *path;
-    CoapDriver *drvPtr;
-    Ns_DriverInitData init;
+    const char        *path;
+    CoapDriver        *drvPtr;
+    Ns_DriverInitData  init;
+    const Ns_Set      *lset;
+
 
     path = Ns_ConfigGetPath(server, module, (char *)0);
     drvPtr = ns_calloc(1, sizeof(CoapDriver));
     drvPtr->packetsize = Ns_ConfigIntRange(path, "packetsize", -1, -1, INT_MAX);
 
+    /*
+     * Perform the following initialization only once, even when loading the
+     * driver multiple times for different addresses or ports.
+     */
+    if (coapKey < 0) {
+        coapKey = Ns_UrlSpecificAlloc();
+
+        UTF8_Encoding = Tcl_GetEncoding(NULL, "utf-8");
+    }
+
+    Ns_Log(Notice, "ModuleInit: path <%s>", path);
+    lset = Ns_ConfigGetSection(path);
+
+    if (lset != NULL || Ns_SetSize(lset) > 0u) {
+        /*
+         * The configuration has a driver module section, which is not empty.
+         */
+        size_t j;
+        Tcl_DString ds, *dsPtr = &ds;
+
+        Ns_DStringInit(dsPtr);
+        for (j = 0u; j < Ns_SetSize(lset); ++j) {
+            const char *key   = Ns_SetKey(lset, j);
+
+            if (STREQ(key, "mapHTTP")) {
+                const char *p, *urlSpec = Ns_SetValue(lset, j);
+
+                /*
+                 * We found an mapHTTP spec. The spec has to contain the HTTP
+                 * method followed by a space and the URL pattern. The
+                 * specified HTTP method is checked for sanity to be less than
+                 * 100 chars.
+                 */
+                p = strchr(urlSpec, INTCHAR(' '));
+                if (p != NULL && (p - urlSpec) < 100) {
+                    char method[100];
+
+                    memcpy(method, urlSpec, (p - urlSpec));
+                    method[(p - urlSpec)] = '\0';
+                    Ns_UrlSpecificSet(server, method, p+1, coapKey, INT2PTR(1), 0u, NULL);
+                    Ns_Log(Notice, "nscoap: map HTTP method <%s> url <%s>", method, p+1);
+                } else {
+                    Ns_Log(Warning, "nscoap mapHTTP: invalid spec: '%s>'", urlSpec);
+                }
+            }
+        }
+    }
+
+    /*
+     * Initialize the driver structure.
+     */
     memset(&init, 0, sizeof(init));
     init.version = NS_DRIVER_VERSION_4;
     init.name = "nscoap";
@@ -187,80 +249,159 @@ Accept(Ns_Sock *sock, NS_SOCKET listensock,
  */
 
 static ssize_t
-Recv(Ns_Sock *sock, struct iovec *bufs, int UNUSED(nbufs),
+Recv(Ns_Sock *sock, struct iovec *bufs, int nbufs,
      Ns_Time *UNUSED(timeoutPtr), unsigned int UNUSED(flags))
 {
     CoapMsg_t        coap;
-    Packet_t         pin;
     CoapParams_t    *cp = sock->arg;
-    ssize_t          msgsize;
+    ssize_t          msgSize;
     socklen_t        socklen = (socklen_t)sizeof(struct NS_SOCKADDR_STORAGE);
     struct sockaddr *saPtr = (struct sockaddr *)&(sock->sa);
 
-    memset(&pin,  0, sizeof(pin));
-
-    msgsize = recvfrom(sock->sock, pin.raw, bufs->iov_len, 0,
+    msgSize = recvfrom(sock->sock, bufs->iov_base, bufs->iov_len, 0,
                        saPtr, &socklen);
     Ns_LogSockaddr(Ns_LogCoapDebug, "Recv", saPtr);
-    Ns_Log(Ns_LogCoapDebug, "Recv sock %d socken %u msgSize %lu", sock->sock, socklen, msgsize);
+    Ns_Log(Ns_LogCoapDebug, "Recv sock %d socken %u msgSize %lu nbufs %d bufSize %lu",
+           sock->sock, socklen, msgSize, nbufs, bufs->iov_len);
 
-    /*
-     * Provide the actual size of the buffer since the structure is not
-     * initialized (no address familiy is known).
-     */
-    socklen = (socklen_t)sizeof(sock->sa);
+    if (msgSize > 0) {
+        Packet_t    pin;
+        const char *key = NULL;
 
-    if (msgsize > 0) {
-        pin.size = (size_t)msgsize;
+        pin.raw  = bufs->iov_base;
+        pin.size = (size_t)msgSize;
+        pin.position = 0u;
 
         if (cp == NULL) {
             cp = ns_calloc(1u, sizeof(CoapParams_t));
             sock->arg = cp;
+            Ns_Log(Ns_LogCoapDebug, "Recv: create new sock params %p", (void*)cp);
+        } else {
+            Ns_Log(Ns_LogCoapDebug, "Recv: reuse sock params %p", (void*)cp);
         }
         memset(&coap, 0, sizeof(coap));
 
         if (ParseCoap(&pin, &coap, cp)) {
-            Packet_t  pout;
-            HttpReq_t http;
+            bool mapHTTP = NS_FALSE;
 
-            memset(&http, 0, sizeof(http));
-            memset(&pout, 0, sizeof(pout));
-
-            Ns_Log(Ns_LogCoapDebug, "Recv: parsed coap %" PRIdz " bytes #options %u", msgsize, coap.optionCount);
             if (coap.optionCount > 0) {
-                Ns_Log(Ns_LogCoapDebug, "Recv: coap: option[0] <%s>", coap.options[0]->value);
+                key = (const char*)coap.options[0]->value;
+
+                /*
+                 * Try the lookup from the URL-trie just for values starting
+                 * with a slash.
+                 */
+                if (*key == '/') {
+                    mapHTTP = PTR2INT(Ns_UrlSpecificGet(sock->driver->server, "GET", key, coapKey));
+                    Ns_Log(Ns_LogCoapDebug, "Recv: coap sever %s: option[0] type %.6x <%s> mapHTTP-> %d",
+                           sock->driver->server, coap.type, coap.options[0]->value, mapHTTP);
+                }
             }
 
-            if (Coap2Http(&coap, &http)
-                && SerializeHttp(&http, &pout)
-                ) {
-                /*
-                 * Pass content to HTTP backend
-                 */
-                Ns_Log(Ns_LogCoapDebug, "Recv: overwrite receive buffer old length %lu new length %lu",
-                       bufs->iov_len, pout.size);
-                /*
-                 * Make sure, that we can indeed copy the content to this
-                 * buffer without globbering memory.
-                 */
-                assert(bufs->iov_len > pout.size);
+            Ns_Log(Ns_LogCoapDebug, "Recv: parsed coap %" PRIdz " bytes #options %u map to HTTP %d",
+                   msgSize, coap.optionCount, (int)mapHTTP);
 
-                memcpy(bufs->iov_base, pout.raw, (size_t)pout.size);
-                msgsize = (ssize_t)pout.size;
-                Ns_Log(Ns_LogCoapDebug, "Recv: passed to HTTP backend; processed %" PRIdz " bytes", msgsize);
+            if (mapHTTP) {
+                Tcl_DString ds;
+                HttpReq_t   httpRequest;
+
+                memset(&httpRequest, 0, sizeof(httpRequest));
+
+                Tcl_DStringInit(&ds);
+                if (Coap2Http(&coap, &httpRequest)
+                    && SerializeHttp(&httpRequest, &ds)
+                    ) {
+                    /*
+                     * Pass content to HTTP backend
+                     */
+                    Ns_Log(Ns_LogCoapDebug, "Recv: overwrite receive buffer old length %lu new length %d",
+                           bufs->iov_len, ds.length);
+                    /*
+                     * Make sure, that we can indeed copy the content to this
+                     * buffer without globbering memory.
+                     */
+                    assert(bufs->iov_len > (size_t)ds.length);
+
+                    memcpy(bufs->iov_base, ds.string, (size_t)ds.length);
+                    msgSize = (ssize_t)ds.length;
+                    Ns_Log(Ns_LogCoapDebug, "Recv: passed to HTTP backend; processed %" PRIdz " bytes", msgSize);
+                } else {
+                    Ns_Log(Error, "Recv: could not parse coap to HTTP");
+                    msgSize = -1;
+                }
+                Tcl_DStringFree(&ds);
+
             } else {
-                Ns_Log(Error, "Recv: could not parse coap to HTTP");
-                msgsize = -1;
+                CoapMsg_t   coapReply;
+                ssize_t     sentBytes;
+                HttpRep_t   httpReply;
+                Packet_t    pout;
+                byte        buffer[MAX_PACKET_SIZE];
+                Tcl_DString ds, *dsPtr = NULL;
+
+                /*
+                 * In case we have a "key" set, try to look up the key from
+                 * the shared NSCOAP_ARRAY_NAME. This allows a light-way
+                 * reporting of a sensor, which might update the nsv
+                 * periodically. it does not require the full HTTP round trip.
+                 */
+                httpReply.payload = NULL;
+                if (key != NULL) {
+                    dsPtr = &ds;
+
+                    Tcl_DStringInit(dsPtr);
+                    /*
+                     * Probably, we have to care for a NULL termination for the key.
+                     */
+                    if (Ns_VarGet(sock->driver->server, NSCOAP_ARRAY_NAME, key, dsPtr) == NS_OK) {
+                        httpReply.payload = (byte *)dsPtr->string;
+                        httpReply.payloadLength = dsPtr->length;
+                        Ns_Log(Ns_LogCoapDebug, "Reply: lookup of nscoap array returned '%s'", dsPtr->string);
+                    } else {
+                        Ns_Log(Ns_LogCoapDebug, "Reply: lookup of nscoap array failed");
+                    }
+                }
+                if (httpReply.payload == NULL) {
+                    httpReply.payload = (byte *)"OK";
+                    httpReply.payloadLength = 2;
+                }
+                httpReply.status = 200;
+
+                Http2Coap(&httpReply, &coapReply, cp);
+
+                pout.raw = buffer;
+                SerializeCoap(&coapReply, &pout);
+
+                sentBytes = sendto(sock->sock, pout.raw, pout.size, 0,
+                                   saPtr, Ns_SockaddrGetSockLen(saPtr));
+
+                if (sentBytes == -1) {
+                    CoapSentError(sock, pout.size);
+                } else {
+                    Ns_Log(Ns_LogCoapDebug, "Reply: sent %" PRIdz " bytes cp %p", sentBytes, (void*)cp);
+                }
+
+                if (dsPtr != NULL) {
+                    Tcl_DStringFree(dsPtr);
+                }
+
+                /*
+                 * The driver does not have to handle to handle the data, all
+                 * replies are already done here. So flag this via msgSize.
+                 */
+                cp->flags |= NSCOAP_FLAG_ALREADY_HANDLED;
+                msgSize = 0u;
+
             }
         } else {
             Ns_Log(Warning, "Recv: could not parse coap package");
-            msgsize = -1;
+            msgSize = -1;
         }
     } else {
         Ns_Log(Ns_LogCoapDebug, "Recv: finished; no data received");
     }
 
-    return msgsize;
+    return msgSize;
 }
 
 
@@ -289,6 +430,8 @@ Send(Ns_Sock *sock, const struct iovec *bufs, int nbufs,
     CoapParams_t *cp = sock->arg;
     Ns_DString *inbuf = cp->sendbuf;
 
+    //Ns_Log(Ns_LogCoapDebug, "Send %d", sock->sock);
+
     /* sock->arg populated by Listen() */
     if (inbuf == NULL) {
         inbuf = ns_calloc(1u, sizeof(Ns_DString));
@@ -302,8 +445,8 @@ Send(Ns_Sock *sock, const struct iovec *bufs, int nbufs,
         size += bufs[nbuf].iov_len;
     }
 
-    Ns_Log(Ns_LogCoapDebug, "Send: finished; received %d bytes, total of %d bytes buffered",
-           size, Ns_DStringLength(inbuf));
+    Ns_Log(Ns_LogCoapDebug, "Send (%d): finished; received %d bytes, total of %d bytes buffered",
+           sock->sock, size, Ns_DStringLength(inbuf));
     return size;
 }
 
@@ -353,58 +496,62 @@ Close(Ns_Sock *sock)
 {
     CoapParams_t *cp = sock->arg;
 
-    Ns_Log(Ns_LogCoapDebug, "Close %d", sock->sock);
+    Ns_Log(Ns_LogCoapDebug, "Close (%d): cp %p sendbuf %p flags %.6x", sock->sock, (void*)cp,
+           cp != NULL ? (void*)cp->sendbuf : NULL,
+           cp != NULL ? cp->flags : 0x0u);
 
-    if (cp == NULL || cp->sendbuf == NULL) {
-        Ns_Log(Ns_LogCoapDebug, "Close: exiting; missing coap socket args or send buffer");
+    if (cp == NULL) {
+        Ns_Log(Warning, "Close: missing coap socket args");
+    } else if (cp->sendbuf == NULL) {
+        Ns_Log(Ns_LogCoapDebug, "Close: empty send buffer");
+
     } else {
         CoapMsg_t        coap;
         HttpRep_t        http;
         Packet_t         pin, pout;
-        size_t           plen, sendbuflen;
         Ns_DString      *sendbuf;
+        byte             buffer[MAX_PACKET_SIZE];
         struct sockaddr *saPtr = (struct sockaddr *)&(sock->sa);
 
         memset(&coap, 0, sizeof(coap));
         memset(&http, 0, sizeof(http));
-        memset(&pin,  0, sizeof(pin));
-        memset(&pout, 0, sizeof(pout));
 
         Ns_LogSockaddr(Ns_LogCoapDebug, "Close", saPtr);
 
         sendbuf = cp->sendbuf;
-        sendbuflen = (size_t)Ns_DStringLength(sendbuf);
 
-        /* Continue using reasonable size */
-        plen = sendbuflen > MAX_PACKET_SIZE ? MAX_PACKET_SIZE : sendbuflen;
-        memcpy(pin.raw, sendbuf->string, plen);
-        pin.size = plen;
+        pin.size = (size_t)sendbuf->length;
+        pin.position = 0u;
+        pin.raw = (byte *)sendbuf->string;
+
+        pout.size = 0u;
+        pout.position = 0u;
+        pout.raw = buffer;
 
         if (ParseHttp(&pin, &http) != NS_OK
             || !Http2Coap(&http, &coap, cp)
             || !SerializeCoap(&coap, &pout)) {
             Ns_Log(Error, "Close: exiting; proxy/parse failed, nothing sent");
         } else {
-            ssize_t len;
+            ssize_t sentBytes;
 
-            len = sendto(sock->sock, pout.raw, (size_t)pout.size, 0,
-                         saPtr, Ns_SockaddrGetSockLen(saPtr));
-            if (len == -1) {
-                char ipString[NS_IPADDR_SIZE];
-
-                Ns_Log(Error, "Close: FD %d: sendto %lu bytes to %s: %s",
-                       sock->sock, pout.size,
-                       ns_inet_ntop(saPtr, ipString, sizeof(ipString)),
-                       strerror(errno));
+            sentBytes = sendto(sock->sock, pout.raw, (size_t)pout.size, 0,
+                               saPtr, Ns_SockaddrGetSockLen(saPtr));
+            if (sentBytes == -1) {
+                CoapSentError(sock, pout.size);
             } else {
-                Ns_Log(Ns_LogCoapDebug, "Close: sent %" PRIdz " bytes", len);
+                Ns_Log(Ns_LogCoapDebug, "Close: sent %" PRIdz " bytes", sentBytes);
             }
         }
 
+        /*
+         * Clear the send buffer, but do not free the Tcl_DString structure in
+         * cp, since we might want to reuse it.
+         */
         Ns_DStringFree(sendbuf);
     }
-    sock->arg = NULL;
-    Ns_Log(Ns_LogCoapDebug, "Close sets socket %d to INVALID SOCKET", sock->sock);
+    //sock->arg = NULL;
+    Ns_Log(Ns_LogCoapDebug, "Close (%d) invalidates socket", sock->sock);
     sock->sock = NS_INVALID_SOCKET;
 
     return;
@@ -676,7 +823,7 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
         optionPtr->value = NULL;
 
         packet->position++;
-        Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: processing option: number delta %u, length %u, option #%d",
+        Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: processing option: delta %u, length %u, count %d",
                optionPtr->delta, optionPtr->length, coap->optionCount);
 
         /* Parse option delta */
@@ -721,8 +868,7 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
         if (processOptions) {
             optionPtr->delta += lastOptionNumber;
             lastOptionNumber = optionPtr->delta;
-            Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: final option number = %u",
-                   optionPtr->delta);
+            //Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: final option number = %u", optionPtr->delta);
             switch (optionPtr->length) {
             case 0x0fu:
                 coap->valid = NS_FALSE;
@@ -748,8 +894,7 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
             default:
                 break;
             }
-            Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: final option length = %u",
-                   optionPtr->length);
+            //Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: final option length = %u", optionPtr->length);
         }
 
         if (processOptions) {
@@ -765,14 +910,12 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
         }
         if (processOptions) {
 
-            /* Append option to collection */
-            //coap->optionCount++;
-            Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage:COPY %p delta %u length %u value %s pos %d",
-                   (void*)optionPtr, optionPtr->delta, optionPtr->length,  optionPtr->value, coap->optionCount);
-
+            /*
+             * Append option to collection
+             */
             coap->options[coap->optionCount++] = optionPtr;
-
             Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: added option to collection");
+
             if (CheckRemainingSize(packet, 1u) == NS_FALSE) {
                 Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: no further options/payload");
                 processOptions = NS_FALSE;
@@ -811,12 +954,6 @@ static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http) {
             "PUT",
             "DELETE"
     };
-
-    /* Ns_GetCharsetEncoding("utf-8") would require initialized hash-tables for quick lookup */
-    Tcl_Encoding encoding = Tcl_GetEncoding(NULL, "utf-8");
-
-    Ns_DStringInit(rawvalPtr);
-    Ns_DStringInit(urlencPtr);
 
     /*
      * Token
@@ -860,19 +997,24 @@ static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http) {
                 Ns_DStringNAppend(&http->host, ":", 1);
                 Ns_DStringNAppend(&http->host, rawvalPtr->string, rawvalPtr->length);
             } else if (coap->options[opt]->delta < 12) {
-                Ns_UrlPathEncode(urlencPtr, rawvalPtr->string, encoding);
+                /*
+                Ns_UrlPathEncode(urlencPtr, rawvalPtr->string, UTF8_Encoding);
                 Ns_DStringNAppend(&http->path, "/", 1);
                 Ns_DStringNAppend(&http->path, urlencPtr->string, urlencPtr->length);
+                */
+                Ns_DStringNAppend(&http->path,  rawvalPtr->string, -1);
             } else if (coap->options[opt]->delta < 16) {
                 if (Tcl_DStringLength(&http->query) == 0) {
                     Ns_DStringNAppend(&http->query, "?", 1);
                 } else {
                     Ns_DStringNAppend(&http->query, "&", 1);
                 }
-                Ns_UrlPathEncode(urlencPtr, rawvalPtr->string, encoding);
+                Ns_UrlPathEncode(urlencPtr, rawvalPtr->string, UTF8_Encoding);
                 Ns_DStringNAppend(&http->query, urlencPtr->string, urlencPtr->length);
             }
         }
+        Tcl_DStringInit(rawvalPtr);
+        Tcl_DStringInit(urlencPtr);
     }
 
     Ns_Log(Ns_LogCoapDebug, "Coap2Http: finished; processed %d CoAP options", coap->optionCount);
@@ -924,23 +1066,15 @@ static bool Http2Coap(HttpRep_t *http, CoapMsg_t *coap, CoapParams_t *params)
  *
  * Returns a boolean value indicating success.
  */
-static bool SerializeHttp(HttpReq_t *http, Packet_t *packet)
+static bool SerializeHttp(HttpReq_t *http, Tcl_DString *dsPtr)
 {
-    Ns_DString request;
-
-    Ns_DStringInit(&request);
-    Ns_DStringPrintf(&request, "%s %s%s %s\r\n",
+    Ns_DStringPrintf(dsPtr, "%s %s%s %s\r\n",
                      http->method, Ns_DStringValue(&http->path),
                      Ns_DStringValue(&http->query), HTTP_VERSION);
-    //Ns_DStringPrintf(&request, "Host: %s\n", Ns_DStringValue(&(http->host)));
-    Ns_DStringPrintf(&request, "Content-Length: 0\r\n\r\n");
-    memcpy(packet->raw,
-           Ns_DStringValue(&request),
-           (size_t)Ns_DStringLength(&request));
-    packet->size = (size_t)Ns_DStringLength(&request);
+    // Ns_DStringPrintf(dsPtr, "Host: %s\n", Ns_DStringValue(&(http->host)));
+    Ns_DStringPrintf(dsPtr, "Content-Length: 0\r\n\r\n");
 
-    Ns_Log(Ns_LogCoapDebug, "SerializeHttp: finished; HTTP output:\n%s", Ns_DStringValue(&request));
-
+    Ns_Log(Ns_LogCoapDebug, "SerializeHttp: finished; HTTP output:\n%s", dsPtr->string);
     return NS_TRUE;
 }
 
@@ -1022,7 +1156,7 @@ static Ns_ReturnCode ParseHttp(Packet_t *packet, HttpRep_t *http)
 /*
  * Construct a CoAP message from a CoAP object.
  */
-static bool SerializeCoap (CoapMsg_t *coap, Packet_t *packet) {
+static bool SerializeCoap(CoapMsg_t *coap, Packet_t *packet) {
     int       delta, o, pdelta = 0, pos;
     Option_t *optionsPtr;
 
@@ -1117,6 +1251,37 @@ Http2CoapCode(int http)
     }
 
     return coap;
+}
+
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * CoapSentError --
+ *
+ *      Send data from given buffers.
+ *
+ * Results:
+ *      Total number of bytes sent or -1 on error or timeout.
+ *
+ * Side effects:
+ *      May block once for driver sendwait timeout seconds if first
+ *      attempt would block.
+ *
+ *----------------------------------------------------------------------
+ */
+static void CoapSentError(Ns_Sock *sock, size_t len)
+{
+    char ipString[NS_IPADDR_SIZE];
+    struct sockaddr *saPtr = (struct sockaddr *)&(sock->sa);
+
+    Ns_Log(Error, "nscoap: send operation on FD %d bytes %lu to %s lead to: %s",
+           sock->sock, len,
+           ns_inet_ntop(saPtr, ipString, sizeof(ipString)),
+           strerror(errno));
+    /*
+     * TODO: probably, we have to cleanup sock...
+     */
 }
 /*
  * Local Variables:
