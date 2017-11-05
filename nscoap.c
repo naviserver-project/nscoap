@@ -69,6 +69,7 @@ static Ns_ReturnCode ParseHttp(Packet_t *packet, HttpRep_t *http);
 static bool CheckRemainingSize(Packet_t *packet, size_t increment);
 static void CoapSentError(Ns_Sock *sock, size_t len);
 static bool SerializeHttp(HttpReq_t *http, Tcl_DString *dsPtr);
+static byte Http2CoapCode(unsigned int http);
 
 /*
  * Static variables defined in this file.
@@ -81,17 +82,15 @@ static int coapKey = -1;
  * Function Definitions
  */
 
-NS_EXPORT int Ns_ModuleInit(const char *server, const char *module)
+NS_EXPORT Ns_ReturnCode Ns_ModuleInit(const char *server, const char *module)
 {
     const char        *path;
     CoapDriver        *drvPtr;
     Ns_DriverInitData  init;
     const Ns_Set      *lset;
 
-
     path = Ns_ConfigGetPath(server, module, (char *)0);
     drvPtr = ns_calloc(1, sizeof(CoapDriver));
-    drvPtr->packetsize = Ns_ConfigIntRange(path, "packetsize", -1, -1, INT_MAX);
 
     /*
      * Perform the following initialization only once, even when loading the
@@ -110,30 +109,36 @@ NS_EXPORT int Ns_ModuleInit(const char *server, const char *module)
         /*
          * The configuration has a driver module section, which is not empty.
          */
-        size_t j;
+        size_t      j;
         Tcl_DString ds, *dsPtr = &ds;
 
         Ns_DStringInit(dsPtr);
         for (j = 0u; j < Ns_SetSize(lset); ++j) {
-            const char *key   = Ns_SetKey(lset, j);
+            const char *key = Ns_SetKey(lset, j);
 
             if (STREQ(key, "mapHTTP")) {
                 const char *p, *urlSpec = Ns_SetValue(lset, j);
 
                 /*
-                 * We found an mapHTTP spec. The spec has to contain the HTTP
+                 * We found a mapHTTP spec. The spec has to contain the HTTP
                  * method followed by a space and the URL pattern. The
                  * specified HTTP method is checked for sanity to be less than
                  * 100 chars.
                  */
                 p = strchr(urlSpec, INTCHAR(' '));
-                if (p != NULL && (p - urlSpec) < 100) {
-                    char method[100];
+                if (p != NULL) {
+                    ssize_t methodNameLength = (p - urlSpec);
 
-                    memcpy(method, urlSpec, (p - urlSpec));
-                    method[(p - urlSpec)] = '\0';
-                    Ns_UrlSpecificSet(server, method, p+1, coapKey, INT2PTR(1), 0u, NULL);
-                    Ns_Log(Notice, "nscoap: map HTTP method <%s> url <%s>", method, p+1);
+                    if (methodNameLength < 100) {
+                        char method[100];
+
+                        memcpy(method, urlSpec, (size_t)methodNameLength);
+                        method[methodNameLength] = '\0';
+                        Ns_UrlSpecificSet(server, method, p+1, coapKey, INT2PTR(1), 0u, NULL);
+                        Ns_Log(Notice, "nscoap: map HTTP method <%s> url <%s>", method, p+1);
+                    } else {
+                        Ns_Log(Warning, "nscoap mapHTTP: method name is too log in spec: '%s>'", urlSpec);
+                    }
                 } else {
                     Ns_Log(Warning, "nscoap mapHTTP: invalid spec: '%s>'", urlSpec);
                 }
@@ -212,7 +217,7 @@ Listen(Ns_Driver *UNUSED(driver), const char *address, unsigned short port, int 
  *
  * Accept --
  *
- *      Accept a new TCP socket in non-blocking mode.
+ *      Accept a new UDP socket in non-blocking mode.
  *
  * Results:
  *      NS_DRIVER_ACCEPT_DATA  - socket accepted, data present
@@ -228,6 +233,7 @@ Accept(Ns_Sock *sock, NS_SOCKET listensock,
        struct sockaddr *UNUSED(saPtr), socklen_t *UNUSED(socklenPtr))
 {
     sock->sock = listensock;
+
     return NS_DRIVER_ACCEPT_DATA;
 }
 
@@ -355,7 +361,7 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int nbufs,
                      */
                     if (Ns_VarGet(sock->driver->server, NSCOAP_ARRAY_NAME, key, dsPtr) == NS_OK) {
                         httpReply.payload = (byte *)dsPtr->string;
-                        httpReply.payloadLength = dsPtr->length;
+                        httpReply.payloadLength = (size_t)dsPtr->length;
                         Ns_Log(Ns_LogCoapDebug, "Reply: lookup of nscoap array returned '%s'", dsPtr->string);
                     } else {
                         Ns_Log(Ns_LogCoapDebug, "Reply: lookup of nscoap array failed");
@@ -390,7 +396,8 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int nbufs,
                  * replies are already done here. So flag this via msgSize.
                  */
                 cp->flags |= NSCOAP_FLAG_ALREADY_HANDLED;
-                msgSize = 0u;
+                //msgSize = 0;
+                msgSize = -1;
 
             }
         } else {
@@ -715,13 +722,14 @@ static bool CheckRemainingSize(Packet_t *packet, size_t increment)
  * Returns a boolean value indicating success.
  */
 static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
-    Option_t   *optionPtr;
-    int         i, codeValue, lastOptionNumber = 0;
-    bool        processOptions;
-    Code_t      code;
+    Option_t    *optionPtr;
+    size_t       i;
+    unsigned int codeValue, lastOptionNumber = 0u;
+    bool         processOptions;
+    Code_t       code;
 
     /* Registry of valid CoAP message codes */
-    static const int code_registry[] = {
+    static const unsigned int code_registry[] = {
         000, 001, 002, 003, 004,
         201, 202, 203, 204, 205,
         400, 401, 402, 403, 404, 405, 406, 412, 413, 415,
@@ -763,7 +771,7 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
     /* Bit 8-15: Message Code */
     code.class  = ((packet->raw[1] >> 5) & 0x7u);
     code.detail = (packet->raw[1] & 0x1fu);
-    codeValue   = code.class * 100 + code.detail;
+    codeValue   = code.class * 100u + code.detail;
     Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: message code: %d", codeValue);
 
     /*
@@ -771,7 +779,7 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
      * not, we report the request being not valid (which might be a little
      * harsh for some applications).
      */
-    for (i = 0; i < (sizeof(code_registry) / sizeof(int)); i++) {
+    for (i = 0u; i < (sizeof(code_registry) / sizeof(int)); i++) {
         if (code_registry[i] == codeValue) {
             coap->codeValue = codeValue;
             break;
@@ -834,7 +842,7 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
             case 0x0fu:
                     coap->payload = &(packet->raw[packet->position]);
                     coap->payloadLength = packet->size - packet->position;
-                    Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: payload marker detected. Payload length = %d",
+                    Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: payload marker detected. Payload length = %lu",
                            coap->payloadLength);
                     break;
             default:
@@ -1031,31 +1039,36 @@ static bool Http2Coap(HttpRep_t *http, CoapMsg_t *coap, CoapParams_t *params)
 {
     bool success = NS_TRUE;
 
-    /* consider conserved CoAP request parameter */
+    /*
+     * Consider conserved CoAP request parameter
+     */
     if (params->tokenLength > 0) {
         memcpy(coap->token, params->token, params->tokenLength);
         coap->tokenLength = params->tokenLength;
     } else {
         coap->tokenLength = 0;
     }
-    /* request is of type CON, reply with ACK */
+    /*
+     * Request is of type CON, reply with ACK
+     */
     if (params->type == 0) {
         coap->type = 2;
     } else {
         coap->type = 1;
     }
     /*
-     * matching mID required for piggybacked ACK replies,
+     * Matching messageID required for piggybacked ACK replies,
      * not forbidden for other replies
      */
-    coap->messageID = params->messageID;
-
+    coap->messageID     = params->messageID;
     coap->version       = 1;
     coap->codeValue     = http->status;
-    Ns_Log(Ns_LogCoapDebug, "Http2Coap: finished; HTTP status: %u", http->status);
-
+    coap->messageID     = params->messageID;
     coap->payload       = http->payload;
     coap->payloadLength = http->payloadLength;
+    coap->optionCount   = 0;
+
+    Ns_Log(Ns_LogCoapDebug, "Http2Coap: finished; HTTP status: %u", http->status);
 
     return success;
 }
@@ -1083,6 +1096,7 @@ static bool SerializeHttp(HttpReq_t *http, Tcl_DString *dsPtr)
 static Ns_ReturnCode ParseHttp(Packet_t *packet, HttpRep_t *http)
 {
     Ns_ReturnCode status;
+    int           returnedStatus;
 
     Ns_Log(Ns_LogCoapDebug, "ParseHttp started <%s>", packet->raw);
 
@@ -1090,12 +1104,12 @@ static Ns_ReturnCode ParseHttp(Packet_t *packet, HttpRep_t *http)
     status = Ns_HttpMessageParse((char *)packet->raw, (size_t)packet->size,
                                  http->headers,
                                  NULL, NULL,
-                                 &http->status,
+                                 &returnedStatus,
                                  (char **)&http->payload);
+    http->status = (unsigned int)returnedStatus;
+    http->payloadLength = (packet->size - (size_t)(http->payload - packet->raw));
 
-    http->payloadLength = (packet->size - (int)(http->payload - packet->raw));
-
-    Ns_Log(Ns_LogCoapDebug, "ParseHttp: finished; headers: %d, payload length: %u, packet size: %lu",
+    Ns_Log(Ns_LogCoapDebug, "ParseHttp: finished; headers: %d, payload length: %lu, packet size: %lu",
            (int)http->headers->size, http->payloadLength, packet->size);
 
     return status;
@@ -1157,8 +1171,10 @@ static Ns_ReturnCode ParseHttp(Packet_t *packet, HttpRep_t *http)
  * Construct a CoAP message from a CoAP object.
  */
 static bool SerializeCoap(CoapMsg_t *coap, Packet_t *packet) {
-    int       delta, o, pdelta = 0, pos;
-    Option_t *optionsPtr;
+    int           o;
+    size_t        pos;
+    unsigned int  delta, pdelta = 0u;
+    Option_t     *optionsPtr;
 
     /* Mandatory headers */
     packet->raw[0] = (byte)((coap->version << 6) |
@@ -1168,11 +1184,11 @@ static bool SerializeCoap(CoapMsg_t *coap, Packet_t *packet) {
     packet->raw[2] = (byte)((coap->messageID >> 8) & 0xffu);
     packet->raw[3] = (byte)(coap->messageID & 0xffu);
     memcpy(&packet->raw[4], coap->token, (size_t)coap->tokenLength);
-    pos = (int)(4 + coap->tokenLength);
+    pos = (4u + coap->tokenLength);
 
     /* Options */
     for (o = 0; o < coap->optionCount; o++) {
-        int dlpos;
+        size_t dlpos;
 
         optionsPtr = coap->options[o];
         /* Option code */
@@ -1188,7 +1204,7 @@ static bool SerializeCoap(CoapMsg_t *coap, Packet_t *packet) {
             packet->raw[dlpos] = (0xdu << 4);
             delta -= 13;
             memcpy(&packet->raw[pos], &delta, 1);
-            pos += 1;
+            pos += 1u;
         } else {
             packet->raw[dlpos] = (byte)(delta << 4);
         }
@@ -1197,12 +1213,12 @@ static bool SerializeCoap(CoapMsg_t *coap, Packet_t *packet) {
             packet->raw[dlpos] |= 0xeu;
             delta -= 269;
             memcpy(&packet->raw[pos], &optionsPtr->length, 2);
-            pos += 2;
+            pos += 2u;
         } else if (optionsPtr->length > 12) {
             packet->raw[dlpos] |= 0xdu;
             delta -= 13;
             memcpy(&packet->raw[pos], &optionsPtr->length, 1);
-            pos += 1;
+            pos += 1u;
         } else {
             packet->raw[dlpos] |= (optionsPtr->length & 0xfu);
         }
@@ -1210,7 +1226,7 @@ static bool SerializeCoap(CoapMsg_t *coap, Packet_t *packet) {
 
     /* Payload marker + payload */
     if (coap->payloadLength > 0) {
-        int maxlen;
+        size_t maxlen;
 
         packet->raw[pos++] = 0xffu;
         maxlen = MAX_COAP_SIZE - pos;
@@ -1219,25 +1235,25 @@ static bool SerializeCoap(CoapMsg_t *coap, Packet_t *packet) {
         pos += maxlen;
     }
 
-    packet->size = (size_t)pos;
+    packet->size = pos;
 
     return NS_TRUE;
 }
 
 
 static byte
-Http2CoapCode(int http)
+Http2CoapCode(unsigned int http)
 {
-    int i;
-    byte coap = 0;
+    size_t i;
+    byte   coap = 0;
     struct code {
-        int http;
+        unsigned int http;
         byte coap;
     } codes[] = {
         { 200, 0x45u }
     };
 
-    for (i = 0; i < sizeof(codes) / sizeof(struct code); i++) {
+    for (i = 0u; i < sizeof(codes) / sizeof(struct code); i++) {
         if (http == codes[i].http) {
             coap = codes[i].coap;
             break;
@@ -1245,7 +1261,7 @@ Http2CoapCode(int http)
     }
 
     /* If there's no matching entry convert code to CoAP format */
-    if (!coap) {
+    if (coap != 0u) {
         coap = (byte)(((http / 100 & 0x7u) << 5) |
                       (http % 100 & 0x1fu));
     }

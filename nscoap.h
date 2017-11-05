@@ -24,8 +24,8 @@ typedef unsigned char byte;
 /* Message code details */
 typedef struct Code_s
 {
-    int     class;
-    int     detail;
+    unsigned int     class;
+    unsigned int     detail;
 } Code_t;
 
 typedef struct Option_s
@@ -38,17 +38,17 @@ typedef struct Option_s
 /* Holds the CoAP message and its parameters */
 typedef struct CoapMsg_s
 {
-    bool        valid;          /* validity of the message */
-    int         version;        /* CoAP version */
-    int         type;           /* message type */
-    size_t      tokenLength;    /* token length */
-    int         codeValue;      /* message code */
-    int         messageID;      /* message id */
-    byte        token[8];       /* token */
-    byte       *payload;        /* payload */
-    int         payloadLength;  /* length of payload */
-    int         optionCount;    /* number of valid options */
-    Option_t   *options[MAX_COAP_CONTENT];
+    bool         valid;          /* validity of the message */
+    unsigned int version;        /* CoAP version */
+    unsigned int type;           /* message type */
+    size_t       tokenLength;    /* token length */
+    unsigned int codeValue;      /* message code */
+    unsigned int messageID;      /* message id */
+    byte         token[8];       /* token */
+    byte        *payload;        /* payload */
+    size_t       payloadLength;  /* length of payload */
+    int          optionCount;    /* number of valid options */
+    Option_t    *options[MAX_COAP_CONTENT];
 } CoapMsg_t;
 
 typedef struct HttpReq_s
@@ -62,10 +62,10 @@ typedef struct HttpReq_s
 
 typedef struct HttpRep_s
 {
-    int         status;                 /* HTTP status code */
-    Ns_Set     *headers;                /* HTTP headers */
-    byte       *payload;                /* pointer to beginning of payload */
-    int         payloadLength;          /* length of payload in bytes */
+    unsigned int  status;                 /* HTTP status code */
+    Ns_Set       *headers;                /* HTTP headers */
+    byte         *payload;                /* pointer to beginning of payload */
+    size_t        payloadLength;          /* length of payload in bytes */
 } HttpRep_t;
 
 /* Raw packet bytes (L4 payload) */
@@ -78,15 +78,16 @@ typedef struct Packet_s
 
 /* Driver parameters */
 typedef struct {
-    int packetsize;
+    int placeholder;                    /* currently, we need no "own" parameters,
+                                           but empty structs are a non-standard an GNU extension */
 } CoapDriver;
 
 /* CoAP parameters (sock->arg) */
 typedef struct CoapParams_s
 {
     Ns_DString  *sendbuf;                /* buffered respnse waiting to be sent */
-    int          type;                   /* message type (for con/ack matching) */
-    int          messageID;              /* message ID (for req/ack matching) */
+    unsigned int type;                   /* message type (for con/ack matching) */
+    unsigned int messageID;              /* message ID (for req/ack matching) */
     byte         token[8];               /* CoAP token */
     size_t       tokenLength;            /* token length */
     unsigned int flags;
@@ -99,7 +100,6 @@ static bool SerializeCoap(CoapMsg_t *coap, Packet_t *packet);
 static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params);
 static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http);
 static bool Http2Coap(HttpRep_t *http, CoapMsg_t *coap, CoapParams_t *params);
-static byte Http2CoapCode(int http);
 
 static Ns_DriverListenProc Listen;
 static Ns_DriverAcceptProc Accept;
