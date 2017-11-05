@@ -433,13 +433,13 @@ static ssize_t
 Send(Ns_Sock *sock, const struct iovec *bufs, int nbufs,
      const Ns_Time *UNUSED(timeoutPtr), unsigned int UNUSED(flags))
 {
-    int nbuf, size;
+    int           nbuf;
+    ssize_t       size;
     CoapParams_t *cp = sock->arg;
-    Ns_DString *inbuf = cp->sendbuf;
+    Ns_DString   *inbuf = cp->sendbuf;
 
     //Ns_Log(Ns_LogCoapDebug, "Send %d", sock->sock);
 
-    /* sock->arg populated by Listen() */
     if (inbuf == NULL) {
         inbuf = ns_calloc(1u, sizeof(Ns_DString));
         Ns_DStringInit(inbuf);
@@ -447,12 +447,12 @@ Send(Ns_Sock *sock, const struct iovec *bufs, int nbufs,
     }
 
     /* Append buffer content to sendbuf */
-    for (nbuf = size = 0; nbuf < nbufs; nbuf++) {
+    for (nbuf = 0, size = 0; nbuf < nbufs; nbuf++) {
         Tcl_DStringAppend(inbuf, bufs[nbuf].iov_base, (int)bufs[nbuf].iov_len);
-        size += bufs[nbuf].iov_len;
+        size += (ssize_t)bufs[nbuf].iov_len;
     }
 
-    Ns_Log(Ns_LogCoapDebug, "Send (%d): finished; received %d bytes, total of %d bytes buffered",
+    Ns_Log(Ns_LogCoapDebug, "Send (%d): finished; received %ld bytes, total of %d bytes buffered",
            sock->sock, size, Ns_DStringLength(inbuf));
     return size;
 }
@@ -1220,7 +1220,7 @@ static bool SerializeCoap(CoapMsg_t *coap, Packet_t *packet) {
             memcpy(&packet->raw[pos], &optionsPtr->length, 1);
             pos += 1u;
         } else {
-            packet->raw[dlpos] |= (optionsPtr->length & 0xfu);
+            packet->raw[dlpos] |= ((byte)(optionsPtr->length & (byte)0x0fu));
         }
     }
 
