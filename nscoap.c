@@ -271,8 +271,8 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int nbufs,
            sock->sock, socklen, msgSize, nbufs, bufs->iov_len);
 
     if (msgSize > 0) {
-        Packet_t    pin;
-        const char *key = NULL;
+        Packet_t  pin;
+        char     *key = NULL;
 
         pin.raw  = bufs->iov_base;
         pin.size = (size_t)msgSize;
@@ -288,10 +288,22 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int nbufs,
         memset(&coap, 0, sizeof(coap));
 
         if (ParseCoap(&pin, &coap, cp)) {
-            bool mapHTTP = NS_FALSE;
+            bool   mapHTTP = NS_FALSE;
+            size_t keyLength;
+            char   savedByte;
 
             if (coap.optionCount > 0) {
-                key = (const char*)coap.options[0]->value;
+                key = (char *)coap.options[0]->value;
+                keyLength = coap.options[0]->length;
+
+                /*
+                 * We assume here, that the receive buffer is at least one
+                 * byte longer than the buffer ot to the key. we terminate the
+                 * string but save the overwritten byte for restoring it
+                 * later.
+                 */
+                savedByte = key[keyLength];
+                key[keyLength] = 0u;
 
                 /*
                  * Try the lookup from the URL-trie just for values starting
@@ -349,23 +361,25 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int nbufs,
                  * In case we have a "key" set, try to look up the key from
                  * the shared NSCOAP_ARRAY_NAME. This allows a light-way
                  * reporting of a sensor, which might update the nsv
-                 * periodically. it does not require the full HTTP round trip.
+                 * periodically. It does not require the full HTTP round trip.
                  */
                 httpReply.payload = NULL;
                 if (key != NULL) {
                     dsPtr = &ds;
 
                     Tcl_DStringInit(dsPtr);
-                    /*
-                     * Probably, we have to care for a NULL termination for the key.
-                     */
                     if (Ns_VarGet(sock->driver->server, NSCOAP_ARRAY_NAME, key, dsPtr) == NS_OK) {
                         httpReply.payload = (byte *)dsPtr->string;
                         httpReply.payloadLength = (size_t)dsPtr->length;
                         Ns_Log(Ns_LogCoapDebug, "Reply: lookup of nscoap array returned '%s'", dsPtr->string);
                     } else {
-                        Ns_Log(Ns_LogCoapDebug, "Reply: lookup of nscoap array failed");
+                        Ns_Log(Ns_LogCoapDebug, "Reply: lookup of nscoap array for key <%s> failed", key);
                     }
+                    /*
+                     * Restore globbed byte
+                     */
+                    key[keyLength] = savedByte;
+
                 }
                 if (httpReply.payload == NULL) {
                     httpReply.payload = (byte *)"OK";
@@ -635,7 +649,7 @@ resend:
     {
         char saString[NS_IPADDR_SIZE], baString[NS_IPADDR_SIZE];
 
-        Ns_Log(Notice, "nscoap: sending %" PRIdz " bytes to %s:%d from %s", len,
+        Ns_Log(Ns_LogCoapDebug, "nscoap: sending %" PRIdz " bytes to [%s]:%d from %s", len,
                ns_inet_ntop(saPtr, saString, sizeof(saString)),
                Ns_SockaddrGetPort(saPtr),
                ns_inet_ntop(baPtr, baString, sizeof(baString)));
