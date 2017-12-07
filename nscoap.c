@@ -1275,7 +1275,7 @@ Http2CoapCode(unsigned int http)
     }
 
     /* If there's no matching entry convert code to CoAP format */
-    if (coap != 0u) {
+    if (coap == 0u) {
         coap = (byte)(((http / 100 & 0x7u) << 5) |
                       (http % 100 & 0x1fu));
     }
