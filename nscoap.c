@@ -378,18 +378,21 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int nbufs,
                         Ns_Log(Ns_LogCoapDebug, "Reply: lookup of nscoap array returned '%s'", dsPtr->string);
                     } else {
                         Ns_Log(Ns_LogCoapDebug, "Reply: lookup of nscoap array for key <%s> failed", key);
+                        httpReply.status = 404;
                     }
                     /*
                      * Restore globbed byte
                      */
                     key[keyLength] = savedByte;
 
-                }
-                if (httpReply.payload == NULL) {
+                } else {
+                    /*
+                     * If no URI path is set, respond directly (evaluation mode).
+                     */
                     httpReply.payload = (byte *)"OK";
                     httpReply.payloadLength = 2;
+                    httpReply.status = 200;
                 }
-                httpReply.status = 200;
 
                 Http2Coap(&httpReply, &coapReply, cp);
 
