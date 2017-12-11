@@ -309,10 +309,10 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int nbufs,
                     key[keyLength] = 0u;
 
                     /*
-                     * Try the lookup from the URL-trie just for values starting
-                     * with a slash.
+                     * Try the lookup from the URL-trie for all values except a
+                     * first URI path option of "nomap".
                      */
-                    if (*key == '/') {
+                    if (strcmp(key, "nomap")) {
                         mapHTTP = PTR2INT(Ns_UrlSpecificGet(sock->driver->server, "GET", key, coapKey));
                         Ns_Log(Ns_LogCoapDebug, "Recv: coap sever %s: option[0] type %.6x <%s> mapHTTP-> %d",
                                sock->driver->server, coap.type, coap.options[0]->value, mapHTTP);
