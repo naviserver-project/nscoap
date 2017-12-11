@@ -288,31 +288,35 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int nbufs,
         memset(&coap, 0, sizeof(coap));
 
         if (ParseCoap(&pin, &coap, cp)) {
+            size_t i, number = 0u;
             bool   mapHTTP = NS_FALSE;
             size_t keyLength;
             char   savedByte;
 
-            if (coap.optionCount > 0) {
-                key = (char *)coap.options[0]->value;
-                keyLength = coap.options[0]->length;
+            for (i = 0u; i < coap.optionCount; i++) {
+                number += (size_t)coap.options[i]->delta;
+                if (number == 11) {
+                    key = (char *)coap.options[i]->value;
+                    keyLength = coap.options[i]->length;
 
-                /*
-                 * We assume here, that the receive buffer is at least one
-                 * byte longer than the buffer ot to the key. we terminate the
-                 * string but save the overwritten byte for restoring it
-                 * later.
-                 */
-                savedByte = key[keyLength];
-                key[keyLength] = 0u;
+                    /*
+                     * We assume here, that the receive buffer is at least one
+                     * byte longer than the buffer ot to the key. we terminate the
+                     * string but save the overwritten byte for restoring it
+                     * later.
+                     */
+                    savedByte = key[keyLength];
+                    key[keyLength] = 0u;
 
-                /*
-                 * Try the lookup from the URL-trie just for values starting
-                 * with a slash.
-                 */
-                if (*key == '/') {
-                    mapHTTP = PTR2INT(Ns_UrlSpecificGet(sock->driver->server, "GET", key, coapKey));
-                    Ns_Log(Ns_LogCoapDebug, "Recv: coap sever %s: option[0] type %.6x <%s> mapHTTP-> %d",
-                           sock->driver->server, coap.type, coap.options[0]->value, mapHTTP);
+                    /*
+                     * Try the lookup from the URL-trie just for values starting
+                     * with a slash.
+                     */
+                    if (*key == '/') {
+                        mapHTTP = PTR2INT(Ns_UrlSpecificGet(sock->driver->server, "GET", key, coapKey));
+                        Ns_Log(Ns_LogCoapDebug, "Recv: coap sever %s: option[0] type %.6x <%s> mapHTTP-> %d",
+                               sock->driver->server, coap.type, coap.options[0]->value, mapHTTP);
+                    }
                 }
             }
 
