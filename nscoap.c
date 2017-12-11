@@ -1325,3 +1325,4 @@ static void CoapSentError(Ns_Sock *sock, size_t len)
  * indent-tabs-mode: nil
  * End:
  */
+/* vim: set et ts=4 sw=4: */
