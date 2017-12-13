@@ -32,6 +32,7 @@ typedef struct Option_s
 {
     unsigned int delta;
     unsigned int length;
+    unsigned int number;
     byte        *value;
 } Option_t;
 
