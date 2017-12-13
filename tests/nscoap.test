@@ -56,7 +56,7 @@ test nscoap-1.0 {test syntax} -body {
 # Perform direct round-trip (no nsv-array, no mapping provided)
 #
 test nscoap-2.1 {direct request} -constraints {serverListen} -body {
-    ns_coap $addr $port "@\x01*\x02\xb5hello"
+    ns_coap $addr $port "@\x01*\x02"
 } -match glob -result "*OK"
 
 #
@@ -65,7 +65,7 @@ test nscoap-2.1 {direct request} -constraints {serverListen} -body {
 test nscoap-2.2 {short request 1.0} -constraints {serverListen} -setup {
     nsv_set nscoap hello 123
 } -body {
-    ns_coap $addr $port "@\x01*\x02\xb5hello"
+    ns_coap $addr $port "@\x01*\x02\xb3nsv\x05hello"
 } -cleanup {
     nsv_unset nscoap hello
 } -match glob -result "*123"

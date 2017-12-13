@@ -271,8 +271,7 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int nbufs,
            sock->sock, socklen, msgSize, nbufs, bufs->iov_len);
 
     if (msgSize > 0) {
-        Packet_t  pin;
-        char     *key = NULL;
+        Packet_t pin;
 
         pin.raw  = bufs->iov_base;
         pin.size = (size_t)msgSize;
@@ -288,34 +287,29 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int nbufs,
         memset(&coap, 0, sizeof(coap));
 
         if (ParseCoap(&pin, &coap, cp)) {
-            size_t i, number = 0u;
+            size_t i;
             bool   mapHTTP = NS_FALSE;
             size_t keyLength;
-            char   savedByte;
+            char   key[13] = "";
 
             for (i = 0u; i < coap.optionCount; i++) {
-                number += (size_t)coap.options[i]->delta;
-                if (number == 11) {
-                    key = (char *)coap.options[i]->value;
+                if (coap.options[i]->number == 11
+                    && coap.options[i]->length < 13) {
                     keyLength = coap.options[i]->length;
-
-                    /*
-                     * We assume here, that the receive buffer is at least one
-                     * byte longer than the buffer ot to the key. we terminate the
-                     * string but save the overwritten byte for restoring it
-                     * later.
-                     */
-                    savedByte = key[keyLength];
+                    memcpy(key, coap.options[i]->value, keyLength);
                     key[keyLength] = 0u;
 
                     /*
                      * Try the lookup from the URL-trie for all values except a
-                     * first URI path option of "nomap".
+                     * first URI path option of "nsv".
                      */
-                    if (strcmp(key, "nomap")) {
+                    if (strcmp(key, "nsv")
+                        && coap.options[i]->delta > 0) {
                         mapHTTP = PTR2INT(Ns_UrlSpecificGet(sock->driver->server, "GET", key, coapKey));
-                        Ns_Log(Ns_LogCoapDebug, "Recv: coap sever %s: option[0] type %.6x <%s> mapHTTP-> %d",
-                               sock->driver->server, coap.type, coap.options[0]->value, mapHTTP);
+                        Ns_Log(Ns_LogCoapDebug, "Recv: coap sever %s: option[i] type %.6x <%s> mapHTTP-> %d",
+                               sock->driver->server, coap.type, coap.options[i]->value, mapHTTP);
+                    } else if (coap.options[i]->delta == 0) {
+                        break;
                     }
                 }
             }
@@ -368,7 +362,7 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int nbufs,
                  * periodically. It does not require the full HTTP round trip.
                  */
                 httpReply.payload = NULL;
-                if (key != NULL) {
+                if (key[0] != 0u) {
                     dsPtr = &ds;
 
                     Tcl_DStringInit(dsPtr);
@@ -378,12 +372,9 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int nbufs,
                         Ns_Log(Ns_LogCoapDebug, "Reply: lookup of nscoap array returned '%s'", dsPtr->string);
                     } else {
                         Ns_Log(Ns_LogCoapDebug, "Reply: lookup of nscoap array for key <%s> failed", key);
+                        httpReply.payloadLength = 0u;
                         httpReply.status = 404;
                     }
-                    /*
-                     * Restore globbed byte
-                     */
-                    key[keyLength] = savedByte;
 
                 } else {
                     /*
@@ -895,9 +886,9 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
 
         /* No payload, process length */
         if (processOptions) {
-            optionPtr->delta += lastOptionNumber;
-            lastOptionNumber = optionPtr->delta;
-            //Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: final option number = %u", optionPtr->delta);
+            optionPtr->number = optionPtr->delta + lastOptionNumber;
+            lastOptionNumber = optionPtr->number;
+            //Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: final option number = %u", optionPtr->number);
             switch (optionPtr->length) {
             case 0x0fu:
                 coap->valid = NS_FALSE;
@@ -1015,24 +1006,24 @@ static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http) {
          *   11  URI path
          *   15  URI query
          */
-        if (coap->options[opt]->delta & 0x3u) {
+        if (coap->options[opt]->number & 0x3u) {
             Ns_DStringNAppend(rawvalPtr,
                               (char *)(coap->options[opt]->value),
                               (int)coap->options[opt]->length);
-            if (coap->options[opt]->delta < 4) {
+            if (coap->options[opt]->number < 4) {
                 /* Hosts are not being transcoded from UTF-8 to %-encoding yet (method missing) */
                 Ns_DStringNAppend(&http->host, rawvalPtr->string, rawvalPtr->length);
-            } else if (coap->options[opt]->delta < 8) {
+            } else if (coap->options[opt]->number < 8) {
                 Ns_DStringNAppend(&http->host, ":", 1);
                 Ns_DStringNAppend(&http->host, rawvalPtr->string, rawvalPtr->length);
-            } else if (coap->options[opt]->delta < 12) {
+            } else if (coap->options[opt]->number < 12) {
                 /*
                 Ns_UrlPathEncode(urlencPtr, rawvalPtr->string, UTF8_Encoding);
                 Ns_DStringNAppend(&http->path, "/", 1);
                 Ns_DStringNAppend(&http->path, urlencPtr->string, urlencPtr->length);
                 */
                 Ns_DStringNAppend(&http->path,  rawvalPtr->string, -1);
-            } else if (coap->options[opt]->delta < 16) {
+            } else if (coap->options[opt]->number < 16) {
                 if (Tcl_DStringLength(&http->query) == 0) {
                     Ns_DStringNAppend(&http->query, "?", 1);
                 } else {
