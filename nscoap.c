@@ -367,6 +367,7 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int nbufs,
 
                     Tcl_DStringInit(dsPtr);
                     if (Ns_VarGet(sock->driver->server, NSCOAP_ARRAY_NAME, key, dsPtr) == NS_OK) {
+                        httpReply.status = 200;
                         httpReply.payload = (byte *)dsPtr->string;
                         httpReply.payloadLength = (size_t)dsPtr->length;
                         Ns_Log(Ns_LogCoapDebug, "Reply: lookup of nscoap array returned '%s'", dsPtr->string);
