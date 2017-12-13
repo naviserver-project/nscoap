@@ -23,3 +23,11 @@ include $(NAVISERVER)/include/Makefile.module
 
 test: all
 	export $(LD_LIBRARY_PATH); $(NSD) $(NS_TEST_CFG) $(NS_TEST_ALL)
+
+runtest: all
+	export $(LD_LIBRARY_PATH); $(NSD) $(NS_TEST_CFG)
+
+gdbtest: all
+	@echo set args $(NS_TEST_CFG) $(NS_TEST_ALL) > gdb.run
+	export $(LD_LIBRARY_PATH); gdb -x gdb.run ${NSD}
+	rm gdb.run
