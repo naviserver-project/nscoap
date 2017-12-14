@@ -48,7 +48,7 @@ if {$port ne ""} {
 # available. When the command changes, this reminds us un adding tests
 # for the changed arguments.
 #
-test nscoap-1.0 {test syntax} -body {
+test nscoap-1.1 {test syntax} -body {
     ns_coap
 } -returnCodes error -result {wrong # args: should be "ns_coap ?-timeout timeout? ?-noreply? ?-retries retries? ?-stream stream? ?-bind bind? ?--? address port data"}
 
@@ -56,34 +56,92 @@ test nscoap-1.0 {test syntax} -body {
 # Perform direct round-trip (no nsv-array, no mapping provided)
 #
 test nscoap-2.1 {direct request} -constraints {serverListen} -body {
-    ns_coap $addr $port "@\x01*\x02"
+    ns_coap $addr $port "@\x01\*\x02"
 } -match glob -result "*OK"
 
 #
 # Return value from nsv array for key "hello"
 #
-test nscoap-2.2 {short request 1.0} -constraints {serverListen} -setup {
+test nscoap-2.2 {nsv request, valid} -constraints {serverListen} -setup {
     nsv_set nscoap hello 123
 } -body {
-    ns_coap $addr $port "@\x01*\x02\xb3nsv\x05hello"
+    ns_coap $addr $port "@\x01\*\x02\xb3nsv\x05hello"
 } -cleanup {
     nsv_unset nscoap hello
 } -match glob -result "*123"
 
 
 #
+# Ensure that non-existent array NSV keys yield a 404 reply
+#
+test nscoap-2.3 {nsv request, invalid key} -constraints {serverListen} -setup {
+    nsv_set nscoap hello 123
+} -body {
+    ns_coap $addr $port "@\x01\*\x02\xb3nsv\x08nonexist"
+} -cleanup {
+    nsv_unset nscoap hello
+} -match glob -result "`\x84\*\x02"
+
+
+#
 # Perform HTTP mapping, the "URL" starts with a "/".
 #
-test nscoap-2.3 {short request 1.0} -constraints {serverListen} -setup {
+test nscoap-2.4 {http-mapped request} -constraints {serverListen} -setup {
     ns_register_proc GET /test {
         ns_return 200 text/plain "Hello World"
     }
 } -body {
-    ns_coap $addr $port "@\x01*\x02\xb5/test"
+    ns_coap $addr $port "@\x01\*\x02\xb4test"
 } -cleanup {
     ns_unregister_op GET /test
 } -match glob -result "*Hello World"
 
 
+#
+# CON message should result in reply with ACK bit set
+#
+test nscoap-3.1 {con ack mapping} -constraints {serverListen} -setup {
+    nsv_set nscoap hello 123
+} -body {
+    ns_coap $addr $port "@\x01\*\x02\xb3nsv\x05hello"
+} -cleanup {
+    nsv_unset nscoap hello
+} -match glob -result "`*"
+
+
+#
+# NON message are ok to result in NON replies
+#
+test nscoap-3.2 {non non mapping} -constraints {serverListen} -setup {
+    nsv_set nscoap hello 123
+} -body {
+    ns_coap $addr $port "\x50\x01\*\x02\xb3nsv\x05hello"
+} -cleanup {
+    nsv_unset nscoap hello
+} -match glob -result "\x50*"
+
+
+#
+# Preserve token in reply if set in request
+#
+test nscoap-3.3 {preserve token} -constraints {serverListen} -setup {
+    nsv_set nscoap hello 123
+} -body {
+    ns_coap $addr $port "\x42\x01\*\x02\xab\xcd\xb3nsv\x05hello"
+} -cleanup {
+    nsv_unset nscoap hello
+} -match glob -result "bE\*\x02\xab\xcd*"
+
+
+#
+# Preserve MID between request and reponse
+#
+test nscoap-3.4 {preserve mid} -constraints {serverListen} -setup {
+    nsv_set nscoap hello 123
+} -body {
+    ns_coap $addr $port "\x40\x01\xab\xcd\xb3nsv\x05hello"
+} -cleanup {
+    nsv_unset nscoap hello
+} -match glob -result "\x60\x45\xab\xcd*"
 
 cleanupTests
