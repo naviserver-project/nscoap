@@ -82,6 +82,22 @@ static int coapKey = -1;
  * Function Definitions
  */
 
+# if 1
+static void hexPrint(const char *msg, const unsigned char *octects, size_t octectLength, const char *string)
+{
+    size_t i;
+    fprintf(stderr, "%s (len %zu): ", msg, octectLength);
+    for (i=0; i<octectLength; i++) {
+        fprintf(stderr, "%.2x ", octects[i] & 0xff);
+    }
+    if (string != NULL) {
+        fprintf(stderr, "'%s'", string);
+    }
+    fprintf(stderr, "\n");
+}
+# endif
+
+
 NS_EXPORT Ns_ReturnCode Ns_ModuleInit(const char *server, const char *module)
 {
     const char        *path;
@@ -299,15 +315,20 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int nbufs,
                     memcpy(key, coap.options[i]->value, keyLength);
                     key[keyLength] = 0u;
 
+                    if (Ns_LogSeverityEnabled(Ns_LogCoapDebug)) {
+                        hexPrint("key:", (unsigned char*)key, keyLength, key);
+                    }
+
                     /*
                      * Try the lookup from the URL-trie for all values except a
                      * first URI path option of "nsv".
                      */
-                    if (strcmp(key, "nsv")
-                        && coap.options[i]->delta > 0) {
+                    if ((strcmp(key, "nsv") != 0)
+                        && coap.options[i]->delta > 0
+                        ) {
                         mapHTTP = PTR2INT(Ns_UrlSpecificGet(sock->driver->server, "GET", key, coapKey));
-                        Ns_Log(Ns_LogCoapDebug, "Recv: coap sever %s: option[i] type %.6x <%s> mapHTTP-> %d",
-                               sock->driver->server, coap.type, coap.options[i]->value, mapHTTP);
+                        Ns_Log(Ns_LogCoapDebug, "Recv: coap server %s: option[%lu] type %.6x <%s> mapHTTP-> %d",
+                               sock->driver->server, i, coap.type, key, mapHTTP);
                     } else if (coap.options[i]->delta == 0) {
                         break;
                     }
@@ -1151,7 +1172,7 @@ static Ns_ReturnCode ParseHttp(Packet_t *packet, HttpRep_t *http)
             if (packet->raw[pos - 1] == '\r'
                 && packet->size >= pos + 2
                 && !memcmp(&(packet->raw[pos + 1]), "\r\n", 2)) {
-                /* Body seperator found: save payload coordinates, stop parsing */
+                /* Body separator found: save payload coordinates, stop parsing */
                 pos += 3;
                 if (packet->size > pos) {
                     http->payload = &(packet->raw[pos]);

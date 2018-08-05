@@ -49,7 +49,7 @@ ns_param        pidfile             nsd.pid
 ns_param        jobsperthread       1000               ;# default: 0
 ns_param        jobtimeout          0                  ;# default: 300
 ns_param        schedsperthread     10                 ;# default: 0
-ns_param        progressminsize     [expr 1024*1024*1] ;# default: 0
+ns_param        progressminsize     [expr {1024*1024*1}] ;# default: 0
 #ns_param       concurrentinterpcreate true            ;# default: false
 #ns_param       listenbacklog        256               ;# default: 32; backlog for ns_socket commands
 #ns_param       mutexlocktrace       true              ;# default false; print duractions of long mutex calls to stderr
@@ -100,7 +100,7 @@ ns_param        checkmodifiedsince  false ;# default: true, check modified-since
 ns_param        connsperthread      1000  ;# default: 0; number of connections (requests) handled per thread
 ns_param        minthreads          5     ;# default: 1; minimal number of connection threads
 ns_param        maxthreads          100   ;# default: 10; maximal number of connection threads
-ns_param        maxconnections      100   ;# default: 100; number of allocated connection stuctures
+ns_param        maxconnections      100   ;# default: 100; number of allocated connection structures
 ns_param        threadtimeout       120   ;# default: 120; timeout for idle theads
 #ns_param concurrentcreatethreshold 100   ;# default: 80; allow concrruent creates when queue is fully beyond this percentage
                                           ;# 100 is a concervative value, disabling concurrent creates
@@ -135,7 +135,7 @@ ns_param        enableexpire        false    ;# default: false; set "Expires: no
 #ns_param        enabledebug         true    ;# default: false
 ns_param        singlescript        false    ;# default: false; collapse Tcl blocks to a single Tcl script
 ns_param        cache               false    ;# default: false; enable ADP caching
-ns_param        cachesize           [expr 5000*1024]
+ns_param        cachesize           [expr {5000*1024}]
 
 ns_section     "ns/server/default/tcl"
 ns_param        nsvbuckets          16       ;# default: 8
@@ -145,7 +145,7 @@ ns_section     "ns/server/default/module/nscgi"
 ns_param        map                 "GET  /cgi-bin $home/cgi-bin"
 ns_param        map                 "POST /cgi-bin $home/cgi-bin"
 ns_param        interps              CGIinterps
-#ns_param        allowstaticresources true    ;# default false; allow to serve static resources from cgi directories
+#ns_param        allowstaticresources true    ;# default false; allow one to serve static resources from cgi directories
 
 ns_section "ns/interps/CGIinterps"
 ns_param	.pl		    "/opt/local/bin/perl"
@@ -168,8 +168,8 @@ ns_param        port                 $port
 #ns_param        address             ::0   ;# ::1 corresponds to 127.0.0.1, ::0 is the "unspecified address"
 ns_param        address             $address
 ns_param        hostname            [ns_info hostname]
-ns_param        maxinput            [expr 1024*1024*10] ;# default: 1024*1024, maximum size for inputs (uploads)
-#ns_param        readahead           [expr 1024*1024*1]  ;# default: 16384; size of readahead for requests
+ns_param        maxinput            [expr {1024*1024*10}] ;# default: 1024*1024, maximum size for inputs (uploads)
+#ns_param        readahead           [expr {1024*1024*1}]  ;# default: 16384; size of readahead for requests
 ns_param        backlog             1024         ;# default: 256; backlog for listen operations
 ns_param        acceptsize          10           ;# default: value of "backlog"; max number of accepted (but unqueued) requests
 ns_param        closewait           0            ;# default: 2; timeout in seconds for close on socket
@@ -197,7 +197,7 @@ ns_section     "ns/server/default/module/nscp/users"
 ns_param        user                "::"
 
 ns_section     "ns/server/default/module/nscoap"
-ns_param        address             0.0.0.0
+ns_param        address              $address
 ns_param        port                5683
 
 #
@@ -207,5 +207,15 @@ ns_param        port                5683
 #ns_logctl severity Debug(request) on
 #ns_logctl severity Debug(task) on
 #ns_logctl severity Debug(sql) on
+#ns_logctl severity Debug(coap) on
 #ns_logctl severity Debug on
 
+######################################################################
+# One can send the actual value of an nsv array directly as a reply to
+# a coap request. To do so, set the nsv "nscoap" for the interesting
+# keys to some values. These values can be set by other requests,
+# sensors, etc. To set such values for testing purposes, add lines
+# like the following to /usr/local/ns/tcl/nscoap.tcl
+#
+# nsv_set nscoap hello 123
+# nsv_set nscoap core foo

@@ -18,7 +18,7 @@ ns_section   ns/server/test
 ns_param     connsperthread 100000  ;# default: 0; number of connections (requests) handled per thread
 ns_param     minthreads     2       ;# default: 1; minimal number of connection threads
 ns_param     maxthreads     100     ;# default: 10; maximal number of connection threads
-ns_param     maxconnections 100     ;# default: 100; number of allocated connection stuctures
+ns_param     maxconnections 100     ;# default: 100; number of allocated connection structures
 
 ns_section   ns/server/test/module/nscoap
 ns_param     address        localhost
