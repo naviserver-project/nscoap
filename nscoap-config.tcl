@@ -7,6 +7,7 @@
 #
 set port 8080
 set address "0.0.0.0"
+set address localhost
 
 if {0 && [ns_info ipv6]} {
     #
@@ -103,7 +104,7 @@ ns_param        maxthreads          100   ;# default: 10; maximal number of conn
 ns_param        maxconnections      100   ;# default: 100; number of allocated connection structures
 ns_param        threadtimeout       120   ;# default: 120; timeout for idle theads
 #ns_param concurrentcreatethreshold 100   ;# default: 80; allow concrruent creates when queue is fully beyond this percentage
-                                          ;# 100 is a concervative value, disabling concurrent creates
+                                          ;# 100 is a conservative value, disabling concurrent creates
 
 ns_section     "ns/server/default/db"
 ns_param        pools               *
@@ -137,9 +138,14 @@ ns_param        singlescript        false    ;# default: false; collapse Tcl blo
 ns_param        cache               false    ;# default: false; enable ADP caching
 ns_param        cachesize           [expr {5000*1024}]
 
-ns_section     "ns/server/default/tcl"
-ns_param        nsvbuckets          16       ;# default: 8
-ns_param        library             modules/tcl
+ns_section     "ns/server/default/tcl" {
+    ns_param    initcmds {
+	ns_register_proc POST /foo/bar {
+	    set content [ns_getcontent -as_file false -binary false]
+	    ns_return 200 text/plain okidoki([string length $content])
+	}
+    }
+}
 
 ns_section     "ns/server/default/module/nscgi"
 ns_param        map                 "GET  /cgi-bin $home/cgi-bin"
@@ -199,6 +205,8 @@ ns_param        user                "::"
 ns_section     "ns/server/default/module/nscoap"
 ns_param        address              $address
 ns_param        port                5683
+ns_param        mapHTTP             "GET /foo/*"
+ns_param        mapHTTP             "POST /foo/*"
 
 #
 # For debugging, you might activate one of the following flags
@@ -207,7 +215,7 @@ ns_param        port                5683
 #ns_logctl severity Debug(request) on
 #ns_logctl severity Debug(task) on
 #ns_logctl severity Debug(sql) on
-#ns_logctl severity Debug(coap) on
+ns_logctl severity Debug(coap) on
 #ns_logctl severity Debug on
 
 ######################################################################

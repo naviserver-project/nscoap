@@ -59,6 +59,8 @@ typedef struct HttpReq_s
     Ns_DString  host;           /* CoAP/HTTP URI host portion  */
     Ns_DString  path;           /* CoAP/HTTP URI path portion  */
     Ns_DString  query;          /* CoAP/HTTP URI query portion */
+    byte       *payload;        /* pointer to beginning of payload */
+    size_t      payloadLength;  /* length of payload in bytes */
 } HttpReq_t;
 
 typedef struct HttpRep_s

@@ -308,7 +308,8 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int nbufs,
             size_t keyLength;
             char   key[13] = "";
 
-            for (i = 0u; i < coap.optionCount; i++) {
+            for (i = 0u; i < (size_t)coap.optionCount; i++) {
+                /*fprintf(stderr, "coap.options[%zd] = %d\n", i, coap.options[i]->number);*/
                 if (coap.options[i]->number == 11
                     && coap.options[i]->length < 13) {
                     keyLength = coap.options[i]->length;
@@ -600,7 +601,7 @@ Close(Ns_Sock *sock)
 
 
 static int
-CoapObjCmd(ClientData UNUSED(clientData), Tcl_Interp *interp, int objc, Tcl_Obj *CONST* objv)
+CoapObjCmd(ClientData UNUSED(clientData), Tcl_Interp *interp, int objc, Tcl_Obj *const* objv)
 {
     fd_set fds;
     unsigned char buf[16384];
@@ -978,7 +979,6 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
 static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http) {
     bool success = NS_TRUE;
     int opt;
-    //size_t uutokenLength = 1 + (size_t)(coap->tokenLength * 4) / 2;
     char uutoken[17];
     size_t uutokenLength;
     Ns_DString rawval, *rawvalPtr = &rawval;
@@ -989,7 +989,7 @@ static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http) {
      *   CoAP supports the following methods which are a subset of those
      *   supported by HTTP
      */
-    const char *methods[] = {
+    static const char *methods[] = {
             "",
             "GET",
             "POST",
@@ -1035,16 +1035,17 @@ static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http) {
             if (coap->options[opt]->number < 4) {
                 /* Hosts are not being transcoded from UTF-8 to %-encoding yet (method missing) */
                 Ns_DStringNAppend(&http->host, rawvalPtr->string, rawvalPtr->length);
+
             } else if (coap->options[opt]->number < 8) {
                 Ns_DStringNAppend(&http->host, ":", 1);
                 Ns_DStringNAppend(&http->host, rawvalPtr->string, rawvalPtr->length);
+
             } else if (coap->options[opt]->number < 12) {
-                /*
+
                 Ns_UrlPathEncode(urlencPtr, rawvalPtr->string, UTF8_Encoding);
                 Ns_DStringNAppend(&http->path, "/", 1);
                 Ns_DStringNAppend(&http->path, urlencPtr->string, urlencPtr->length);
-                */
-                Ns_DStringNAppend(&http->path,  rawvalPtr->string, -1);
+
             } else if (coap->options[opt]->number < 16) {
                 if (Tcl_DStringLength(&http->query) == 0) {
                     Ns_DStringNAppend(&http->query, "?", 1);
@@ -1053,10 +1054,15 @@ static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http) {
                 }
                 Ns_UrlPathEncode(urlencPtr, rawvalPtr->string, UTF8_Encoding);
                 Ns_DStringNAppend(&http->query, urlencPtr->string, urlencPtr->length);
+            } else {
+                Ns_Log(Warning, "nscoap: option %d not handled", coap->options[opt]->number);
             }
         }
-        Tcl_DStringInit(rawvalPtr);
-        Tcl_DStringInit(urlencPtr);
+    }
+
+    if (coap->payloadLength > 0u) {
+        http->payload       = coap->payload;
+        http->payloadLength = coap->payloadLength;
     }
 
     Ns_Log(Ns_LogCoapDebug, "Coap2Http: finished; processed %d CoAP options", coap->optionCount);
@@ -1119,7 +1125,9 @@ static bool SerializeHttp(HttpReq_t *http, Tcl_DString *dsPtr)
                      http->method, Ns_DStringValue(&http->path),
                      Ns_DStringValue(&http->query), HTTP_VERSION);
     // Ns_DStringPrintf(dsPtr, "Host: %s\n", Ns_DStringValue(&(http->host)));
-    Ns_DStringPrintf(dsPtr, "Content-Length: 0\r\n\r\n");
+
+    Ns_DStringPrintf(dsPtr, "Content-Length: %ld\r\n\r\n", http->payloadLength);
+    Tcl_DStringAppend(dsPtr, (const char *)http->payload, (int)http->payloadLength);
 
     Ns_Log(Ns_LogCoapDebug, "SerializeHttp: finished; HTTP output:\n%s", dsPtr->string);
     return NS_TRUE;
