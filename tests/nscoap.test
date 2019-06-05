@@ -134,7 +134,7 @@ test nscoap-3.3 {preserve token} -constraints {serverListen} -setup {
 
 
 #
-# Preserve MID between request and reponse
+# Preserve MID between request and response
 #
 test nscoap-3.4 {preserve mid} -constraints {serverListen} -setup {
     nsv_set nscoap hello 123

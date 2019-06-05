@@ -355,7 +355,7 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int nbufs,
                     Ns_Log(Ns_LogCoapDebug, "Recv: overwrite receive buffer old length %lu new length %d",
                            bufs->iov_len, ds.length);
                     /*
-                     * Make sure, that we can indeed copy the content to this
+                     * Make sure that we can indeed copy the content to this
                      * buffer without globbering memory.
                      */
                     assert(bufs->iov_len > (size_t)ds.length);
@@ -603,11 +603,11 @@ Close(Ns_Sock *sock)
 static int
 CoapObjCmd(ClientData UNUSED(clientData), Tcl_Interp *interp, int objc, Tcl_Obj *const* objv)
 {
-    fd_set fds;
-    unsigned char buf[16384];
+    fd_set         fds;
+    unsigned char  buf[16384];
     struct timeval tv;
-    Tcl_DString ds;
-    Tcl_Obj *objd;
+    Tcl_DString    ds;
+    Tcl_Obj       *objd;
     unsigned char *data;
     struct NS_SOCKADDR_STORAGE sa, ba;
     struct sockaddr
@@ -977,10 +977,10 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
  * Returns a boolean value indicating success.
  */
 static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http) {
-    bool success = NS_TRUE;
-    int opt;
-    char uutoken[17];
-    size_t uutokenLength;
+    bool       success = NS_TRUE;
+    int        opt;
+    char       uutoken[17];
+    size_t     uutokenLength;
     Ns_DString rawval, *rawvalPtr = &rawval;
     Ns_DString urlenc, *urlencPtr = &urlenc;
 
@@ -1330,7 +1330,7 @@ Http2CoapCode(unsigned int http)
  */
 static void CoapSentError(Ns_Sock *sock, size_t len)
 {
-    char ipString[NS_IPADDR_SIZE];
+    char             ipString[NS_IPADDR_SIZE];
     struct sockaddr *saPtr = (struct sockaddr *)&(sock->sa);
 
     Ns_Log(Error, "nscoap: send operation on FD %d bytes %lu to %s lead to: %s",
