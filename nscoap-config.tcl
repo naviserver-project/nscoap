@@ -142,7 +142,10 @@ ns_section     "ns/server/default/tcl" {
     ns_param    initcmds {
 	ns_register_proc POST /foo/bar {
 	    set content [ns_getcontent -as_file false -binary false]
-	    ns_return 200 text/plain okidoki([string length $content])
+	    ns_return 200 text/plain POST-okidoki([string length $content])
+	}
+	ns_register_proc GET /foo/bar {
+	    ns_return 200 text/plain GET-okidoki
 	}
     }
 }
