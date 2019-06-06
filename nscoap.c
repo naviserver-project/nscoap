@@ -70,7 +70,7 @@ static bool CheckRemainingSize(Packet_t *packet, size_t increment);
 static void CoapSentError(Ns_Sock *sock, size_t len);
 static bool SerializeHttp(HttpReq_t *http, Tcl_DString *dsPtr);
 static byte Http2CoapCode(unsigned int http);
-
+static const char *CoapMethodCodeToString(unsigned int codeValue);
 /*
  * Static variables defined in this file.
  */
@@ -327,7 +327,10 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int nbufs,
                     if ((strcmp(key, "nsv") != 0)
                         && coap.options[i]->delta > 0
                         ) {
-                        mapHTTP = PTR2INT(Ns_UrlSpecificGet(sock->driver->server, "GET", key, coapKey));
+                        mapHTTP = PTR2INT(Ns_UrlSpecificGet(sock->driver->server,
+                                                            CoapMethodCodeToString(coap.codeValue),
+                                                            key,
+                                                            coapKey));
                         Ns_Log(Ns_LogCoapDebug, "Recv: coap server %s: option[%lu] type %.6x <%s> mapHTTP-> %d",
                                sock->driver->server, i, coap.type, key, mapHTTP);
                     } else if (coap.options[i]->delta == 0) {
@@ -972,18 +975,24 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
 
 
 /*
- * Translate CoAP parameters to HTTP.
+ *----------------------------------------------------------------------
  *
- * Returns a boolean value indicating success.
+ * CoapMethodCodeToString --
+ *
+ *      Perform a mapping from the CoAP method code to the HTTP
+ *      string notation.
+ *
+ * Results:
+ *      const string or NULL, if it does not succeed.
+ *
+ * Side effects:
+ *      None
+ *
+ *----------------------------------------------------------------------
  */
-static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http) {
-    bool       success = NS_TRUE;
-    int        opt;
-    char       uutoken[17];
-    size_t     uutokenLength;
-    Ns_DString rawval, *rawvalPtr = &rawval;
-    Ns_DString urlenc, *urlencPtr = &urlenc;
-
+static const char *
+CoapMethodCodeToString(unsigned int codeValue) {
+    const char *result;
     /*
      * Method codes:
      *   CoAP supports the following methods which are a subset of those
@@ -997,6 +1006,28 @@ static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http) {
             "DELETE"
     };
 
+    if (codeValue < 5) {
+        result = methods[codeValue];
+    } else {
+        result = NULL;
+    }
+    return result;
+}
+
+
+/*
+ * Translate CoAP parameters to HTTP.
+ *
+ * Returns a boolean value indicating success.
+ */
+static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http) {
+    bool       success = NS_TRUE;
+    int        opt;
+    char       uutoken[17];
+    size_t     uutokenLength;
+    Ns_DString rawval, *rawvalPtr = &rawval;
+    Ns_DString urlenc, *urlencPtr = &urlenc;
+
     /*
      * Token
      *   Since the CoAP token consists of 'raw' bytes we need to encode it.
@@ -1006,9 +1037,7 @@ static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http) {
     uutokenLength = Ns_HtuuEncode(coap->token, coap->tokenLength, uutoken);
     Ns_DStringNAppend(&http->token, uutoken, (int)uutokenLength);
 
-    if (coap->codeValue < 5) {
-        http->method = methods[coap->codeValue];
-    }
+    http->method = CoapMethodCodeToString(coap->codeValue);
 
     /* Process CoAP options */
     Ns_DStringInit(&http->host);
