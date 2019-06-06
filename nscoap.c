@@ -71,6 +71,8 @@ static void CoapSentError(Ns_Sock *sock, size_t len);
 static bool SerializeHttp(HttpReq_t *http, Tcl_DString *dsPtr);
 static byte Http2CoapCode(unsigned int http);
 static const char *CoapMethodCodeToString(unsigned int codeValue);
+static const char *CoapContentFormatToString(unsigned int contentFormat);
+
 /*
  * Static variables defined in this file.
  */
@@ -960,7 +962,7 @@ static bool ParseCoap(Packet_t *packet, CoapMsg_t *coap, CoapParams_t *params) {
              * Append option to collection
              */
             coap->options[coap->optionCount++] = optionPtr;
-            Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: added option to collection");
+            Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: added option %d to collection", optionPtr->number);
 
             if (CheckRemainingSize(packet, 1u) == NS_FALSE) {
                 Ns_Log(Ns_LogCoapDebug, "ParseCoapMessage: no further options/payload");
@@ -1010,6 +1012,52 @@ CoapMethodCodeToString(unsigned int codeValue) {
         result = methods[codeValue];
     } else {
         result = NULL;
+    }
+    return result;
+}
+
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * CoapContentFormatToString --
+ *
+ *      Perform a mapping from the CoAP content format code to the HTTP
+ *      string notation.
+ *
+ * Results:
+ *      const string, maybe using "text/plain" as fallback
+ *
+ * Side effects:
+ *      None
+ *
+ *----------------------------------------------------------------------
+ */
+static const char *
+CoapContentFormatToString(unsigned int contentFormat) {
+    const char *result;
+
+    if (contentFormat == 0) {
+        result = "text/plain;charset=utf-8";
+    } else if (contentFormat == 40) {
+        result = "application/link-format";
+    } else if (contentFormat == 40) {
+        result = "application/link-format";
+    } else if (contentFormat == 41) {
+        result = "application/xml";
+    } else if (contentFormat == 42) {
+        result = "application/octet-stream";
+    } else if (contentFormat == 47) {
+        result = "application/exi";
+    } else if (contentFormat == 50) {
+        result = "application/json";
+    } else if (contentFormat == 60) {
+        result = "application/cbor";
+    } else if (contentFormat == 61) {
+        result = "application/cwt";
+    } else {
+        result = "text/plain;charset=utf-8";
+        Ns_Log(Notice, "coap: unknwon content format %d, fall back to: %s", contentFormat, result);
     }
     return result;
 }
@@ -1086,6 +1134,14 @@ static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http) {
             } else {
                 Ns_Log(Warning, "nscoap: option %d not handled", coap->options[opt]->number);
             }
+        } else if (coap->options[opt]->number == 12) {
+            if (coap->options[opt]->length == 1) {
+                coap->contentFormat = coap->options[opt]->value[0];
+            } else if (coap->options[opt]->length == 2) {
+                coap->contentFormat = coap->options[opt]->value[0] << 8 & coap->options[opt]->value[1];
+            }
+            fprintf(stderr, "==== Content-Format: delta %d length %d -> contentFormat %u\n",
+                    coap->options[opt]->delta, coap->options[opt]->length, coap->contentFormat);
         }
     }
 
@@ -1093,6 +1149,7 @@ static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http) {
         http->payload       = coap->payload;
         http->payloadLength = coap->payloadLength;
     }
+    http->contentType = CoapContentFormatToString(coap->contentFormat);
 
     Ns_Log(Ns_LogCoapDebug, "Coap2Http: finished; processed %d CoAP options", coap->optionCount);
     return success;
@@ -1154,9 +1211,13 @@ static bool SerializeHttp(HttpReq_t *http, Tcl_DString *dsPtr)
                      http->method, Ns_DStringValue(&http->path),
                      Ns_DStringValue(&http->query), HTTP_VERSION);
     // Ns_DStringPrintf(dsPtr, "Host: %s\n", Ns_DStringValue(&(http->host)));
-
-    Ns_DStringPrintf(dsPtr, "Content-Length: %ld\r\n\r\n", http->payloadLength);
-    Tcl_DStringAppend(dsPtr, (const char *)http->payload, (int)http->payloadLength);
+    Ns_DStringPrintf(dsPtr, "Content-Length: %ld\r\n", http->payloadLength);
+    if (http->payloadLength > 0) {
+        Ns_DStringPrintf(dsPtr, "Content-Type: %s\r\n\r\n", http->contentType);
+        Tcl_DStringAppend(dsPtr, (const char *)http->payload, (int)http->payloadLength);
+    } else {
+        Tcl_DStringAppend(dsPtr, "\r\n", 2);
+    }
 
     Ns_Log(Ns_LogCoapDebug, "SerializeHttp: finished; HTTP output:\n%s", dsPtr->string);
     return NS_TRUE;

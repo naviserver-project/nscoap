@@ -46,6 +46,7 @@ typedef struct CoapMsg_s
     unsigned int codeValue;      /* message code */
     unsigned int messageID;      /* message id */
     byte         token[8];       /* token */
+    unsigned int contentFormat;  /* Content-Format RFC 7252 sect 5.10 */
     byte        *payload;        /* payload */
     size_t       payloadLength;  /* length of payload */
     int          optionCount;    /* number of valid options */
@@ -59,6 +60,7 @@ typedef struct HttpReq_s
     Ns_DString  host;           /* CoAP/HTTP URI host portion  */
     Ns_DString  path;           /* CoAP/HTTP URI path portion  */
     Ns_DString  query;          /* CoAP/HTTP URI query portion */
+    const char *contentType;    /* HTTP Content-Type */
     byte       *payload;        /* pointer to beginning of payload */
     size_t      payloadLength;  /* length of payload in bytes */
 } HttpReq_t;
