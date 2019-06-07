@@ -123,7 +123,7 @@ NS_EXPORT Ns_ReturnCode Ns_ModuleInit(const char *server, const char *module)
     Ns_Log(Notice, "ModuleInit: path <%s>", path);
     lset = Ns_ConfigGetSection(path);
 
-    if (lset != NULL || Ns_SetSize(lset) > 0u) {
+    if (lset != NULL && Ns_SetSize(lset) > 0u) {
         /*
          * The configuration has a driver module section, which is not empty.
          */
@@ -1041,8 +1041,6 @@ CoapContentFormatToString(unsigned int contentFormat) {
         result = "text/plain;charset=utf-8";
     } else if (contentFormat == 40) {
         result = "application/link-format";
-    } else if (contentFormat == 40) {
-        result = "application/link-format";
     } else if (contentFormat == 41) {
         result = "application/xml";
     } else if (contentFormat == 42) {
@@ -1093,6 +1091,8 @@ static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http) {
     Ns_DStringInit(&http->query);
 
     for (opt = 0; opt < coap->optionCount; opt++) {
+        Option_t  *optionPtr = coap->options[opt];
+
         Ns_DStringInit(rawvalPtr);
         Ns_DStringInit(urlencPtr);
 
@@ -1105,25 +1105,25 @@ static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http) {
          *   11  URI path
          *   15  URI query
          */
-        if (coap->options[opt]->number & 0x3u) {
+        if (optionPtr->number & 0x3u) {
             Ns_DStringNAppend(rawvalPtr,
-                              (char *)(coap->options[opt]->value),
-                              (int)coap->options[opt]->length);
-            if (coap->options[opt]->number < 4) {
+                              (char *)(optionPtr->value),
+                              (int)optionPtr->length);
+            if (optionPtr->number < 4) {
                 /* Hosts are not being transcoded from UTF-8 to %-encoding yet (method missing) */
                 Ns_DStringNAppend(&http->host, rawvalPtr->string, rawvalPtr->length);
 
-            } else if (coap->options[opt]->number < 8) {
+            } else if (optionPtr->number < 8) {
                 Ns_DStringNAppend(&http->host, ":", 1);
                 Ns_DStringNAppend(&http->host, rawvalPtr->string, rawvalPtr->length);
 
-            } else if (coap->options[opt]->number < 12) {
+            } else if (optionPtr->number < 12) {
 
                 Ns_UrlPathEncode(urlencPtr, rawvalPtr->string, UTF8_Encoding);
                 Ns_DStringNAppend(&http->path, "/", 1);
                 Ns_DStringNAppend(&http->path, urlencPtr->string, urlencPtr->length);
 
-            } else if (coap->options[opt]->number < 16) {
+            } else if (optionPtr->number < 16) {
                 if (Tcl_DStringLength(&http->query) == 0) {
                     Ns_DStringNAppend(&http->query, "?", 1);
                 } else {
@@ -1132,16 +1132,14 @@ static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http) {
                 Ns_UrlPathEncode(urlencPtr, rawvalPtr->string, UTF8_Encoding);
                 Ns_DStringNAppend(&http->query, urlencPtr->string, urlencPtr->length);
             } else {
-                Ns_Log(Warning, "nscoap: option %d not handled", coap->options[opt]->number);
+                Ns_Log(Warning, "nscoap: option %d not handled", optionPtr->number);
             }
-        } else if (coap->options[opt]->number == 12) {
-            if (coap->options[opt]->length == 1) {
-                coap->contentFormat = coap->options[opt]->value[0];
-            } else if (coap->options[opt]->length == 2) {
-                coap->contentFormat = coap->options[opt]->value[0] << 8 & coap->options[opt]->value[1];
+        } else if (optionPtr->number == 12) {
+            if (optionPtr->length == 1) {
+                coap->contentFormat = optionPtr->value[0];
+            } else if (optionPtr->length == 2) {
+                coap->contentFormat = ((optionPtr->value[0] << 8) & optionPtr->value[1]);
             }
-            fprintf(stderr, "==== Content-Format: delta %d length %d -> contentFormat %u\n",
-                    coap->options[opt]->delta, coap->options[opt]->length, coap->contentFormat);
         }
     }
 
@@ -1186,7 +1184,6 @@ static bool Http2Coap(HttpRep_t *http, CoapMsg_t *coap, CoapParams_t *params)
      * Matching messageID required for piggybacked ACK replies,
      * not forbidden for other replies
      */
-    coap->messageID     = params->messageID;
     coap->version       = 1;
     coap->codeValue     = http->status;
     coap->messageID     = params->messageID;
@@ -1306,7 +1303,6 @@ static bool SerializeCoap(CoapMsg_t *coap, Packet_t *packet) {
     int           o;
     size_t        pos;
     unsigned int  delta, pdelta = 0u;
-    Option_t     *optionsPtr;
 
     /* Mandatory headers */
     packet->raw[0] = (byte)((coap->version << 6) |
@@ -1320,7 +1316,8 @@ static bool SerializeCoap(CoapMsg_t *coap, Packet_t *packet) {
 
     /* Options */
     for (o = 0; o < coap->optionCount; o++) {
-        size_t dlpos;
+        Option_t *optionsPtr;
+        size_t    dlpos;
 
         optionsPtr = coap->options[o];
         /* Option code */
