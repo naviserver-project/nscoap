@@ -2,7 +2,7 @@
 #include "ns.h"
 
 /* Version of this plugin */
-#define NSCOAP_VERSION "0.1"
+#define NSCOAP_VERSION "0.2"
 
 /* Control debug output */
 #define DEBUG 1
