@@ -1,13 +1,5 @@
 # README #
 
-Usage: nscoap { coap | http }
-Write request to stdin, e.g.:
-```
-#!sh
-
-cat coap_capture.file | ./nscoap coap
-```
-
 # Usage:
 Start NaviServer with the sample config in one window in the foreground:
 
