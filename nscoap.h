@@ -90,7 +90,7 @@ typedef struct {
 /* CoAP parameters (sock->arg) */
 typedef struct CoapParams_s
 {
-    Ns_DString  *sendbuf;                /* buffered respnse waiting to be sent */
+    Ns_DString  *sendbuf;                /* buffered response waiting to be sent */
     unsigned int type;                   /* message type (for con/ack matching) */
     unsigned int messageID;              /* message ID (for req/ack matching) */
     byte         token[8];               /* CoAP token */

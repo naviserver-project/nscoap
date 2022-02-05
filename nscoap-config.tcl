@@ -45,7 +45,7 @@ ns_param        serverlog           error.log
 ns_param        pidfile             nsd.pid
 #ns_param       logdebug            true               ;# default: false
 #ns_param       logroll             false              ;# default: true
-#ns_param	logrollfmt	    %Y-%m-%d           ;# format appendend to log file name
+#ns_param	logrollfmt	    %Y-%m-%d           ;# format appendend to log filename
 #ns_param       dbcloseonexit       off                ;# default: off; from nsdb
 ns_param        jobsperthread       1000               ;# default: 0
 ns_param        jobtimeout          0                  ;# default: 300
@@ -166,7 +166,7 @@ ns_param        rolllog             true     ;# default: true; should server log
 ns_param        rollonsignal        false    ;# default: false; perform roll on a sighup
 ns_param        rollhour            0        ;# default: 0; specify at which hour to roll
 ns_param        maxbackup           7        ;# default: 10; max number of backup log files
-#ns_param       rollfmt		    %Y-%m-%d-%H:%M	;# format appendend to log file name
+#ns_param       rollfmt		    %Y-%m-%d-%H:%M	;# format appendend to log filename
 #ns_param       logpartialtimes     true     ;# default: false
 #ns_param	logreqtime	    true     ;# default: false; include time to service the request
 

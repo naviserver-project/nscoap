@@ -206,7 +206,7 @@ CoapInterpInit(Tcl_Interp *interp, const void *arg)
  *
  * Listen --
  *
- *      Open a listening UDP socket in non-blocking mode.
+ *      Open a listening UDP socket in nonblocking mode.
  *
  * Results:
  *      The open socket or NS_INVALID_SOCKET on error.
@@ -235,7 +235,7 @@ Listen(Ns_Driver *UNUSED(driver), const char *address, unsigned short port, int 
  *
  * Accept --
  *
- *      Accept a new UDP socket in non-blocking mode.
+ *      Accept a new UDP socket in nonblocking mode.
  *
  * Results:
  *      NS_DRIVER_ACCEPT_DATA  - socket accepted, data present
@@ -1055,7 +1055,7 @@ CoapContentFormatToString(unsigned int contentFormat) {
         result = "application/cwt";
     } else {
         result = "text/plain;charset=utf-8";
-        Ns_Log(Notice, "coap: unknwon content format %d, fall back to: %s", contentFormat, result);
+        Ns_Log(Notice, "coap: unknown content format %d, fall back to: %s", contentFormat, result);
     }
     return result;
 }
@@ -1155,7 +1155,7 @@ static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http) {
 
 
 /*
- * Translate a HTTP reply object to a CoAP object
+ * Translate an HTTP reply object to a CoAP object
  *
  * Returns a boolean value indicating success.
  */
@@ -1198,7 +1198,7 @@ static bool Http2Coap(HttpRep_t *http, CoapMsg_t *coap, CoapParams_t *params)
 
 
 /*
- * Construct a HTTP request from a HTTP object.
+ * Construct an HTTP request from an HTTP object.
  *
  * Returns a boolean value indicating success.
  */
