@@ -1,0 +1,697 @@
+commit 1ef7b1ee7cbe7e1d4ed018a45b8fdc2207e5cc3c
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2022-02-05
+
+    improve spelling
+
+M	nscoap-config.tcl
+M	nscoap.c
+M	nscoap.h
+
+commit 07e9568a06dc5443c4018ff353fa60459b45b6f6
+Merge: 6634a83 a4dc532
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2021-02-12
+
+    Merge branch 'master' of https://bitbucket.org/naviserver/nscoap
+
+commit a4dc532237a5086238036441d0a6fd9f4bf44bc9
+Author: Gustaf Neumann <neumann@wu.ac.at>
+Date:   2021-02-12
+
+    Initial commit
+
+A	.gitignore
+
+commit 6634a83a281a11b8497678206413d812c5d5e7d9
+Author: David Hopfmueller <david@hopfmueller.at>
+Date:   2020-07-11
+
+    Remove outdated usage instructions
+
+M	README.md
+
+commit bdcea73b8704683b0d393447806eaa8f5b700134
+Author: David Hopfmueller <david@hopfmueller.at>
+Date:   2020-07-11
+
+    Bump NS_VERSION to 0.2
+
+M	nscoap.h
+
+commit 88c071de47a48e3843c6fe119675009d707ab08d
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2019-06-07
+
+    minor code cleanup:
+    - reduce reference chains
+    - remove redundant assignments
+    - remove locical error
+
+M	nscoap.c
+
+commit c6cafbf009afea286569e552ad176d20840be188
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2019-06-06
+
+    added content types for POST/PUT requests as defined in RFC 7252
+
+M	nscoap.c
+M	nscoap.h
+
+commit 3129969255e8c7f57c9bca08a8fd8076e6eb2103
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2019-06-06
+
+    don't hardcode get on the Ns_UrlSpecificGet() call
+
+M	nscoap.c
+
+commit ec7d1ecbf6bab46223ee865dbbeca1f9c6cb0db5
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2019-06-05
+
+    addin examples to the README.md file
+
+M	README.md
+M	nscoap-config.tcl
+
+commit f2f444edde3ee30df3d678b0097c0ef709db702c
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2019-06-05
+
+    whitespace changes, improve spelling
+
+M	nscoap.c
+M	tests/nscoap.test
+
+commit 4db7838cd55f6346cff6739c5890ccd6e0aecb28
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2019-06-05
+
+    - add payload handling for CoAP POST requests
+    - fix path construction
+    - remove redundant operations
+    - add mapping example in sample config file
+    - turn on coap debug for now
+
+M	nscoap-config.tcl
+M	nscoap.c
+M	nscoap.h
+
+commit fa76dd0edd4cf2177f418ee621e0da2a7cb2449a
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2018-08-05
+
+    - add comment how to set values in the nsv (see end of config file)
+    - add more debugging aids when Debug(coap) is on
+
+M	nscoap-config.tcl
+M	nscoap.c
+M	tests/config.tcl
+
+commit 34c9caae43dcee0942fd77631322acc5a12e80b9
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2017-12-14
+
+    Add additional tests
+
+M	tests/nscoap.test
+
+commit 6096563704162450a0bc7bcd00062e54f7dcaa1a
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2017-12-13
+
+    Set status code to prevent reuse of the previous request's value
+
+M	nscoap.c
+
+commit 86e968568aa4357e3e4fafc91af83cc3573445d4
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2017-12-13
+
+    Rework NSV logic
+    
+    - Use option number, restore option delta semantics
+    - Use "nsv" instead of "nomap" keyword
+    - Improve NSV key handling: the previous logic could result in segfaults as option values can indeed terminate CoAP packets
+    - In order to use NSV handling, use an URI of /nsv/<key> where <key> is a string of 1..12 characters length
+    - Fix bug when NSV key wasn't foung
+    - Adaption of tests to reflect the new NSV logic
+
+M	nscoap.c
+M	tests/nscoap.test
+
+commit a9a7fa48d7378f4fc64d6685d669362d409eaf3f
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2017-12-13
+
+    Track option number in addition to delta
+    
+    The number property is the result of the current option's delta + the previous option's number.  This retains the delta value which can be used to detect multiple occurrences of the same option type.
+
+M	nscoap.h
+
+commit d4152ddcbed0b92dd1bc965fb7862646f71ce2a2
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2017-12-13
+
+    Support individual and debugger testing targets
+
+M	Makefile
+
+commit e16f0f6d60a0ba90940cbc2256ff7dfae58a78d1
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2017-12-11
+
+    Add vim modeline
+
+M	tests/nscoap.test
+
+commit 58bc64a87bc1493174cec9be81500def00ddcc87
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2017-12-11
+
+    Make special handling modes standards-compliant
+    
+    When no resource is found, this should result in a 404. Direct reply for the special case of no URI path option.
+
+M	nscoap.c
+
+commit 97042ed7d9135c6f12719042c887bf45e1c8e30c
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2017-12-11
+
+    Make HTTP the default mapping method
+    
+    The previously used '/' is not ideal for matching since it usually isn't part of the URI path option value.
+
+M	nscoap.c
+
+commit 6a3a5b99fba02cf29757f718fc4b11f6ae0ac90d
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2017-12-11
+
+    Add vim modeline (NS project uses spaces)
+
+M	nscoap.c
+
+commit 448674606417c8e37355c3d0e6c7cd6a87148b5f
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2017-12-11
+
+    Don't expect an URI path option to be the first
+
+M	nscoap.c
+
+commit 864a9228705327d968c6124962dd91ba81395938
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2017-12-07
+
+    Calculate CoAP status code if necessary
+
+M	nscoap.c
+
+commit 431621e98b631cb3c7cff4cba5aa523845121e40
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2017-11-08
+
+    Add regression test for nscoap
+
+M	Makefile
+A	tests/all.tcl
+A	tests/config.tcl
+A	tests/nscoap.test
+
+commit 0b548e908b19ed080f98ec6bfef4052e9e8a79f1
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2017-11-08
+
+    Add null termination to key (for lookups) as indicated in a comment earlier
+
+M	nscoap.c
+
+commit 727b223d4618d94c11684226bc5ee52491804aff
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2017-11-05
+
+    Improve cleanness for gcc, remove documentation bug
+
+M	nscoap.c
+
+commit 54bce0da1fba1be8cf44fbed7815ff8685cab1d2
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2017-11-05
+
+    Code Cleanup and changed communication between driver module and driver.c
+    
+    - remove all warnings, mostly signed/unsigend conversions
+    - don't use signed types for bit operations
+    - report msgSize == -1 (instead of == 0) in cases, where driver thread handles all data
+
+M	nscoap.c
+M	nscoap.h
+
+commit c0a5eaa72cae28690ed3c40614ac5e23c34895a4
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2017-10-31
+
+    Functional and Non-functional overhaul
+    
+    - Add ability to specify automated mapping from COAP -> HTTP
+      via URLspace trie
+      https://naviserver.sourceforge.io/n/manual/files/c-urlspace.html
+      via the config parameter mapHTTP (multiple entries can be specified)
+    
+          ns_section   ns/server/default/module/nscoap
+          ...
+          ns_param     mapHTTP    "GET /*"
+    
+    - Add ability to report values (e.g. from sensors) via
+      nsv array "nscoap" to avoid for simple cases the full
+      round-trip to the connection threads.
+    
+      Example: add a file /usr/local/ns/tcl/nscoap.tcl
+      with the following content
+    
+          nsv_set nscoap hello 123
+    
+      One can use then
+          nc  -u localhost 5683 < capture/001_req_con.raw
+      which sends a request with option "hello", which will receive the
+      reply "123"
+    
+    
+    - reduce number of copy operations of buffers
+    - do not initialize large structures with zeros without need
+
+M	nscoap.c
+M	nscoap.h
+
+commit 7a1c0af2ebc7b67e4c25bae13935006cea00ce8f
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2017-10-30
+
+    More cleanup
+    
+    - add missing prototype
+    - prefer size_t over int when appropriate
+    - follow closer to engineering conventions
+      (use "optionPtr" instead of "option" when using a pointer)
+    - add sanity check in the form of an assertion
+
+M	nscoap.c
+M	nscoap.h
+
+commit c1ae49f34ce8ee781084569b1515cbac3e258b53
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2017-10-30
+
+    add missing compile dependency for Makefile
+
+M	Makefile
+
+commit d80291de4789edc956650a8da859240457d9a9ce
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2017-10-29
+
+    Add benchmark file
+
+A	benchmark
+
+commit 026e6f49b007a754efc7bd0018089de6fef5a8c0
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2017-10-29
+
+    Add nscoap to config file
+
+M	nscoap-config.tcl
+
+commit 8e9f50063e4d179713c2c08148b8ea468800abc7
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2017-10-29
+
+    Add default NaviServer config file
+
+A	nscoap-config.tcl
+
+commit e9661f2a6f6a2448025f65c14d72f64fd8ddc71f
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2017-10-27
+
+    trim trailing spaces
+
+M	nscoap.c
+
+commit 22691527386ddfb5d8b8b96c259f2ac86d86f3c2
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2017-10-27
+
+    Avoid *alloc* operations, when local variables are sufficient; allocate all structions in a uniform way
+
+M	nscoap.c
+M	nscoap.h
+
+commit 5ba2841b327979365944425442d351d844cab9b6
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2017-10-27
+
+    Fix sockaddr issue (don't provide 0 socklen in recvfrom)
+
+M	nscoap.c
+
+commit 0006ae81051e8a03365da5076aa93eccce56fc25
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2017-10-27
+
+    change result of ParseHttp() to Ns_ReturnCode
+
+M	nscoap.c
+M	nscoap.h
+
+commit ceb81d6d260f159a9833a88050a5e532f4cfbe69
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2017-10-27
+
+    fix potential memory problems by using new ns function Ns_HttpMessageParse()
+
+M	nscoap.c
+
+commit f7e6bf162df9abf7c0bc9dac917d4c8e02565187
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2017-10-24
+
+    fix various memory leaks, redcuce return before end of function
+
+M	nscoap.c
+
+commit fdb9f40a8956f952a0d1070c3058093b77c2af9e
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2017-10-24
+
+    reduce variable scopes
+
+M	nscoap.c
+
+commit be895ad3116411441e290ed6d8f2fa3b780a316d
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2017-10-24
+
+    reduce compiler warnings, make unused arguments with UNUSED
+
+M	nscoap.c
+
+commit 5c6a24e19781f9a30befe8becacd9e322a9d07e7
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2017-10-23
+
+    Add module-specific debugging
+
+M	nscoap.c
+
+commit f29a2d91fe57ce2c3d2fa53a4500fceb5375647d
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2017-10-22
+
+    Align with NS interface changes
+
+M	nscoap.c
+
+commit 5a86dc28503fa8d8e886ff6c3cadc9d06a091c17
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2016-12-14
+
+    Clean up some more
+
+M	nscoap.c
+
+commit af87a0f33e87378ab8e3fa20b0274bb7512006ad
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2016-12-14
+
+    Tidy up code, function and variable names
+
+M	nscoap.c
+M	nscoap.h
+
+commit a47c687b75f062b94bb57f3a3fc0295455fd68b3
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2016-12-13
+
+    Rework sending of data
+    
+    During handling one request, Send() can get called multiple times. At
+    the same time, a CoAP reply is supposed to fit into a single packet.
+    Therefore, Send() now only collects data and is sent once Close()
+    is called.
+
+M	nscoap.c
+M	nscoap.h
+
+commit d4f62f73861d14f453f719321feb8ae9cf2c55c4
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2016-12-11
+
+    Properly set length of data to be submitted
+
+M	nscoap.c
+
+commit b1bd7f4e6f9cf17902c787531f0041fc595f6512
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2016-12-11
+
+    Catch up on recent NS interface changes (incl. IPv6)
+
+M	Makefile
+M	nscoap.c
+M	nscoap.h
+
+commit fd626cb7e1526eeacd85e5b3bb795ade6c790ebf
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2015-04-24
+
+    Fix HTTP reply status code parsing.
+
+M	nscoap.c
+
+commit 3213e4ed09dfddc0cb296f738bd30ef43cd06859
+Merge: f1b5719 f52384f
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2015-04-24
+
+    Automated merge
+
+commit f1b5719b3f802ad8d6fcc346342800a10839a87c
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2015-04-24
+
+    Modularization of functions, multiple enhancements + bug fixes.
+
+M	nscoap.c
+M	nscoap.h
+
+commit d78dbcecee48b886175c21959092afae04c2e6e4
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2015-03-13
+
+    Implementation of CoAP message constructor.
+
+M	nscoap.c
+M	nscoap.h
+
+commit f52384fe70748da69a1ee1ca214d0663ef2d51f5
+Author: deltahotel <david@hopfmueller.at>
+Date:   2015-02-22
+
+    README.md edited online with Bitbucket
+
+M	README.md
+
+commit 3039a5d1a79f60c12bf946212802ff687e0e6c02
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2015-02-22
+
+    - Start implementation of HTTP reply parsing
+    - Change invocation to input via stdin
+
+M	nscoap.c
+M	nscoap.h
+
+commit 37c5aa627fe45e5af48007bd4115113ab0a8c310
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2015-02-22
+
+    Only assign valid method string pointers
+
+M	nscoap.c
+M	nscoap.h
+
+commit cb7023da674df7aa81008f37bd9307e1d7ea90cb
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2015-02-22
+
+    - Fix bug that resulted in always adding the first option
+
+M	nscoap.c
+
+commit 6fb90fb4c8f1afb5dcf7472463d8fe3081330ef7
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2015-02-20
+
+    - use Tcl_GetEncoding() instead of Ns_GetCharsetEncoding() since latter one requires initialized hash-tables
+    - remove a few confusions between pointers and structures
+
+M	nscoap.c
+M	nscoap.h
+
+commit d2e015bc041ad82f82431b56664bdb21ffb02005
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2015-02-20
+
+    Added Makefile
+
+A	Makefile
+
+commit 78a4c90bd71b992b77a2d33c1977bd11b36cf3a9
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2015-02-20
+
+    Use Tcl methods, currently not working (segfault)
+
+R067	coap2http.c	nscoap.c
+R066	coap2http.h	nscoap.h
+
+commit 61c3cb71d2a1a3b91ef78b5c936d91031323363d
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2015-02-19
+
+    Move declarations to separate header file
+
+M	coap2http.c
+A	coap2http.h
+
+commit 457038667b79164b50302776374d13e9abcbc7d8
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2015-02-17
+
+    Partial implementation of the HTTP constructor (WIP)
+
+M	coap2http.c
+
+commit 0260ebaf6d83b1628255b48da3e705468a240c0f
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2015-02-15
+
+    Rename Request_[st] to CoapMsg_[st] to better distinguish CoAP from HTTP counterparts
+
+M	coap2http.c
+
+commit e54b5f2f0ad37c77331607e83648a898fe16d93e
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2015-02-15
+
+    Rename ParseRequest to ParseCoapMessage
+
+M	coap2http.c
+
+commit 3fa117d58e7f4e8e70e6c09a1d801a4d6d798276
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2015-02-15
+
+    Use boolean expressions with conditionals
+
+M	coap2http.c
+
+commit b1cf695ba5b752bc172fe31d87ee4d9cedb467ad
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2015-02-15
+
+    Output debug to stderr
+
+M	coap2http.c
+
+commit 91c8b6731229bf89d202f4abc5fa53749bafe8fc
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2015-02-15
+
+    Assign option.length as an unsigned int uniformly
+
+M	coap2http.c
+
+commit a77f1916f3551a0c0a1afa5657870e0af78686a0
+Author: David Hopfmueller <david.hopfmueller@wu.ac.at>
+Date:   2015-02-15
+
+    Remove IDE stuff from repository
+
+D	.idea/.name
+D	.idea/inspectionProfiles/Project_Default.xml
+D	.idea/inspectionProfiles/profiles_settings.xml
+D	.idea/misc.xml
+D	.idea/modules.xml
+D	.idea/ns_coap.iml
+D	.idea/vcs.xml
+D	CMakeLists.txt
+
+commit 6cc4b4b0c9bd99874b91e9749358ef831bf22645
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2015-02-15
+
+    - fix wrong shift
+
+M	coap2http.c
+
+commit 4a7bb607a4c843893308f9314f406aa6aabf7cd5
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2015-02-15
+
+    - follow naviserver conventions
+    - some cleanup
+
+M	coap2http.c
+
+commit 15996f2898f4c4d87c40aa2603aefc72d8a71641
+Author: deltahotel <david@hopfmueller.at>
+Date:   2015-02-14
+
+    README.md edited online with Bitbucket
+
+A	README.md
+
+commit 39a4cf83a7f302d11ee42d4d1a792f9dfe63e13e
+Author: david@david-t440s <david@david-t440s>
+Date:   2015-02-14
+
+    Added debug code, various fixes, some packet captures
+
+A	.idea/inspectionProfiles/Project_Default.xml
+A	.idea/inspectionProfiles/profiles_settings.xml
+A	capture/001_req_con.pcapng
+A	capture/001_req_con.raw
+A	capture/002_req_non_uri-host.pcapng
+A	capture/002_req_non_uri-host.raw
+A	capture/003_rep_non_205.pcapng
+A	capture/003_rep_non_205.raw
+M	coap2http.c
+
+commit 7198c3e6896a6ca41a466f707bedd195a8f43a77
+Author: david@david-t440s.david.sites.hopfmueller.at <david@david-t440s.david.sites.hopfmueller.at>
+Date:   2015-02-14
+
+    Cleanup code, complete option parsing
+
+M	coap2http.c
+
+commit 4accfd13392b0f0558aeb1754a7f1faf69231f9a
+Author: david@david-t440s.david.sites.hopfmueller.at <david@david-t440s.david.sites.hopfmueller.at>
+Date:   2015-02-14
+
+    Initial commit based on recovered working draft (2015-01-16)
+
+A	.idea/.name
+A	.idea/misc.xml
+A	.idea/modules.xml
+A	.idea/ns_coap.iml
+A	.idea/vcs.xml
+A	CMakeLists.txt
+A	coap2http.c
