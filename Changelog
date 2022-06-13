@@ -1,3 +1,11 @@
+commit 10e8dd944134c819c9a88a9dff3ea43f82b67ecd
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2022-06-13
+
+    added Changelog
+
+M	.gitignore
+
 commit 1ef7b1ee7cbe7e1d4ed018a45b8fdc2207e5cc3c
 Author: Gustaf Neumann <neumann@wu-wien.ac.at>
 Date:   2022-02-05
