@@ -357,8 +357,8 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int nbufs,
                     /*
                      * Pass content to HTTP backend
                      */
-                    Ns_Log(Ns_LogCoapDebug, "Recv: overwrite receive buffer old length %lu new length %d",
-                           bufs->iov_len, ds.length);
+                    Ns_Log(Ns_LogCoapDebug, "Recv: overwrite receive buffer old length %lu new length %lu",
+                           bufs->iov_len, (unsigned long)ds.length);
                     /*
                      * Make sure that we can indeed copy the content to this
                      * buffer without globbering memory.
@@ -492,8 +492,8 @@ Send(Ns_Sock *sock, const struct iovec *bufs, int nbufs,
         size += (ssize_t)bufs[nbuf].iov_len;
     }
 
-    Ns_Log(Ns_LogCoapDebug, "Send (%d): finished; received %ld bytes, total of %d bytes buffered",
-           sock->sock, size, Ns_DStringLength(inbuf));
+    Ns_Log(Ns_LogCoapDebug, "Send (%d): finished; received %ld bytes, total of %lu bytes buffered",
+           sock->sock, size, (unsigned long)Ns_DStringLength(inbuf));
     return size;
 }
 
