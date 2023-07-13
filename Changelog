@@ -1,3 +1,11 @@
+commit 4c24ca15b997a9183a4bffb41f0e74c685f30de2
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2023-04-19
+
+    avoid compiler warning when compiled against Tcl9
+
+M	nscoap.c
+
 commit 10e8dd944134c819c9a88a9dff3ea43f82b67ecd
 Author: Gustaf Neumann <neumann@wu-wien.ac.at>
 Date:   2022-06-13
@@ -253,7 +261,7 @@ Date:   2017-11-05
 
     Code Cleanup and changed communication between driver module and driver.c
     
-    - remove all warnings, mostly signed/unsigend conversions
+    - remove all warnings, mostly signed/unsigned conversions
     - don't use signed types for bit operations
     - report msgSize == -1 (instead of == 0) in cases, where driver thread handles all data
 

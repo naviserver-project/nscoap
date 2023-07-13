@@ -10,7 +10,7 @@ $ /usr/local/ns/bin/nsd -t nscoap-config.tcl -f
 The sample config file maps GET and POST requests to /foo/* for
 forwarding to the HTTP server. The sample config file registers as
 well a request handler for POST and GET on /foo/bar via
-`ns_register_proc`. One can cetainly run other requests by adding
+`ns_register_proc`. One can certainly run other requests by adding
 tcl/adp/html files into the pages directory, or via other means
 possible by NaviServer.
 

@@ -85,12 +85,12 @@ static int coapKey = -1;
  */
 
 # if 1
-static void hexPrint(const char *msg, const unsigned char *octects, size_t octectLength, const char *string)
+static void hexPrint(const char *msg, const unsigned char *octets, size_t octetLength, const char *string)
 {
     size_t i;
-    fprintf(stderr, "%s (len %zu): ", msg, octectLength);
-    for (i=0; i<octectLength; i++) {
-        fprintf(stderr, "%.2x ", octects[i] & 0xff);
+    fprintf(stderr, "%s (len %zu): ", msg, octetLength);
+    for (i=0; i<octetLength; i++) {
+        fprintf(stderr, "%.2x ", octets[i] & 0xff);
     }
     if (string != NULL) {
         fprintf(stderr, "'%s'", string);
@@ -187,6 +187,7 @@ NS_EXPORT Ns_ReturnCode Ns_ModuleInit(const char *server, const char *module)
     Ns_LogCoapDebug = Ns_CreateLogSeverity("Debug(coap)");
 
     Ns_TclRegisterTrace(server, CoapInterpInit, drvPtr, NS_TCL_TRACE_CREATE);
+    Ns_Log(Notice, "nscoap: version %s loaded", NSCOAP_VERSION);
 
     return Ns_DriverInit(server, module, &init);
 }
@@ -195,7 +196,6 @@ static int
 CoapInterpInit(Tcl_Interp *interp, const void *arg)
 {
     Tcl_CreateObjCommand(interp, "ns_coap", CoapObjCmd, (ClientData)arg, NULL);
-    Ns_Log(Notice, "nscoap: version %s loaded", NSCOAP_VERSION);
 
     return NS_OK;
 }
@@ -503,7 +503,7 @@ Send(Ns_Sock *sock, const struct iovec *bufs, int nbufs,
  *
  * Keep --
  *
- *      Cannot do keep-alives with UDP
+ *      Keep-alive handling make no sense with UDP.
  *
  * Results:
  *      NS_FALSE, always.
