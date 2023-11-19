@@ -1,3 +1,24 @@
+commit 8ac115fbe677d5d051e0dc00ff3b19f6b34288e9
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2023-07-13
+
+    Added .gitignore
+
+M	.gitignore
+
+commit 11560aa4bca7b5d56d7acebf9d2018f03f9c3bc9
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2023-07-13
+
+    Maintenance work:
+    
+    - Reduced verbosity (don't say "loaded" for every interpreter init)
+    - Improved spelling
+
+M	README.md
+M	nscoap-config.tcl
+M	nscoap.c
+
 commit 4c24ca15b997a9183a4bffb41f0e74c685f30de2
 Author: Gustaf Neumann <neumann@wu-wien.ac.at>
 Date:   2023-04-19
