@@ -620,7 +620,8 @@ CoapObjCmd(ClientData UNUSED(clientData), Tcl_Interp *interp, int objc, Tcl_Obj 
         *baPtr = (struct sockaddr *)&ba;
     char          *address = NULL, *bindaddr = NULL;
     int            i, sock, rc = TCL_OK;
-    int            stream = 0, timeout = 5, retries = 1, noreply = 0, intlen;
+    int            stream = 0, timeout = 5, retries = 1, noreply = 0;
+    TCL_SIZE_T     intlen;
     unsigned short port;
     ssize_t        len;
     Ns_ObjvSpec opts[] = {
