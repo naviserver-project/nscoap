@@ -72,6 +72,7 @@ static bool SerializeHttp(HttpReq_t *http, Tcl_DString *dsPtr);
 static byte Http2CoapCode(unsigned int http);
 static const char *CoapMethodCodeToString(unsigned int codeValue);
 static const char *CoapContentFormatToString(unsigned int contentFormat);
+static TCL_OBJCMDPROC_T CoapObjCmd;
 
 /*
  * Static variables defined in this file.
@@ -195,7 +196,7 @@ NS_EXPORT Ns_ReturnCode Ns_ModuleInit(const char *server, const char *module)
 static int
 CoapInterpInit(Tcl_Interp *interp, const void *arg)
 {
-    Tcl_CreateObjCommand(interp, "ns_coap", CoapObjCmd, (ClientData)arg, NULL);
+    TCL_CREATEOBJCOMMAND(interp, "ns_coap", CoapObjCmd, (ClientData)arg, NULL);
 
     return NS_OK;
 }
@@ -606,7 +607,7 @@ Close(Ns_Sock *sock)
 
 
 static int
-CoapObjCmd(ClientData UNUSED(clientData), Tcl_Interp *interp, int objc, Tcl_Obj *const* objv)
+CoapObjCmd(ClientData UNUSED(clientData), Tcl_Interp *interp, TCL_SIZE_T objc, Tcl_Obj *const* objv)
 {
     fd_set         fds;
     unsigned char  buf[16384];
@@ -619,7 +620,7 @@ CoapObjCmd(ClientData UNUSED(clientData), Tcl_Interp *interp, int objc, Tcl_Obj 
         *saPtr = (struct sockaddr *)&sa,
         *baPtr = (struct sockaddr *)&ba;
     char          *address = NULL, *bindaddr = NULL;
-    int            i, sock, rc = TCL_OK;
+    TCL_SIZE_T            i, sock, rc = TCL_OK;
     int            stream = 0, timeout = 5, retries = 1, noreply = 0;
     TCL_SIZE_T     intlen;
     unsigned short port;

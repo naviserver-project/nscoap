@@ -113,7 +113,6 @@ static Ns_DriverSendProc Send;
 static Ns_DriverKeepProc Keep;
 static Ns_DriverCloseProc Close;
 static Ns_TclTraceProc CoapInterpInit;
-static Tcl_ObjCmdProc CoapObjCmd;
 
 /*
  * Local Variables:
