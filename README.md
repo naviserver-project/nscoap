@@ -1,5 +1,7 @@
 # README #
 
+Compatibility: The module compiles with Tcl 8.5, 8.6 and 9.0.
+
 # Usage:
 Start NaviServer with the sample config in one window in the foreground:
 
