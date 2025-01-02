@@ -1223,7 +1223,6 @@ static bool SerializeHttp(HttpReq_t *http, Tcl_DString *dsPtr)
 }
 
 
-#if 1
 static Ns_ReturnCode ParseHttp(Packet_t *packet, HttpRep_t *http)
 {
     Ns_ReturnCode status;
@@ -1232,11 +1231,20 @@ static Ns_ReturnCode ParseHttp(Packet_t *packet, HttpRep_t *http)
     Ns_Log(Ns_LogCoapDebug, "ParseHttp started <%s>", packet->raw);
 
     http->headers = Ns_SetCreate("headers");
+#if NS_MAJOR_VERSION > 4
+    http->headers->flags |= NS_SET_OPTION_NOCASE;
+    status = Ns_HttpResponseMessageParse((char *)packet->raw, (size_t)packet->size,
+                                 http->headers,
+                                 NULL, NULL,
+                                 &returnedStatus,
+                                 (char **)&http->payload);
+#else
     status = Ns_HttpMessageParse((char *)packet->raw, (size_t)packet->size,
                                  http->headers,
                                  NULL, NULL,
                                  &returnedStatus,
                                  (char **)&http->payload);
+#endif
     http->status = (unsigned int)returnedStatus;
     http->payloadLength = (packet->size - (size_t)(http->payload - packet->raw));
 
@@ -1245,57 +1253,7 @@ static Ns_ReturnCode ParseHttp(Packet_t *packet, HttpRep_t *http)
 
     return status;
 }
-#else
-static Ns_ReturnCode ParseHttp(Packet_t *packet, HttpRep_t *http)
-{
-    int         pos, lineStart;
-    char        status[4];
-    Ns_DString  headerLine;
 
-    Ns_Log(Ns_LogCoapDebug, "ParseHttp started <%s>", packet->raw);
-
-    /* Save status code */
-    memcpy(&status[0], &packet->raw[9], 3);
-    status[3] = '\0';
-    http->status = (int)strtol(&status[0], NULL, 10);
-
-    /*
-     * Split reply headers into lines
-     */
-    http->headers = Ns_SetCreate("headers");
-    for (pos = 11, lineStart = 11; pos < packet->size; pos++) {
-        if (packet->raw[pos] == '\n') {
-            /* Found line break, peek for proper body separator */
-            if (packet->raw[pos - 1] == '\r'
-                && packet->size >= pos + 2
-                && !memcmp(&(packet->raw[pos + 1]), "\r\n", 2)) {
-                /* Body separator found: save payload coordinates, stop parsing */
-                pos += 3;
-                if (packet->size > pos) {
-                    http->payload = &(packet->raw[pos]);
-                    http->payloadLength = (packet->size - pos);
-                }
-                break;
-            } else {
-                /* Preliminarily increase pos for easier calculations */
-                pos++;
-                /* New header line, save it */
-                Ns_DStringInit(&headerLine);
-                Ns_DStringNAppend(&headerLine, (char *)&(packet->raw[lineStart]), (pos - lineStart));
-                Ns_ParseHeader(http->headers, Ns_DStringValue(&headerLine), ToLower);
-                /* Remember beginning of new line (might be needed later) */
-                lineStart = pos;
-            }
-        }
-    }
-
-    Ns_DStringFree(&headerLine);
-    Ns_Log(Ns_LogCoapDebug, "ParseHttp: finished; headers: %d, payload length: %u, packet size: %u",
-           (int)http->headers->size, http->payloadLength, packet->size);
-
-    return NS_OK;
-}
-#endif
 
 
 /*
