@@ -72,7 +72,9 @@ static bool SerializeHttp(HttpReq_t *http, Tcl_DString *dsPtr);
 static byte Http2CoapCode(unsigned int http);
 static const char *CoapMethodCodeToString(unsigned int codeValue);
 static const char *CoapContentFormatToString(unsigned int contentFormat);
+
 static TCL_OBJCMDPROC_T CoapObjCmd;
+static Ns_DriverSendProc Send;
 
 /*
  * Static variables defined in this file.
