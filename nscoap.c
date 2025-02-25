@@ -1211,8 +1211,8 @@ static bool Http2Coap(HttpRep_t *http, CoapMsg_t *coap, CoapParams_t *params)
 static bool SerializeHttp(HttpReq_t *http, Tcl_DString *dsPtr)
 {
     Ns_DStringPrintf(dsPtr, "%s %s%s %s\r\n",
-                     http->method, Ns_DStringValue(&http->path),
-                     Ns_DStringValue(&http->query), HTTP_VERSION);
+                     http->method, http->path.string,
+                     http->query.string, HTTP_VERSION);
     // Ns_DStringPrintf(dsPtr, "Host: %s\n", http->host.string);
     Ns_DStringPrintf(dsPtr, "content-length: %ld\r\n", http->payloadLength);
     if (http->payloadLength > 0) {
