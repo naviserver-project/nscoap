@@ -133,7 +133,7 @@ NS_EXPORT Ns_ReturnCode Ns_ModuleInit(const char *server, const char *module)
         size_t      j;
         Tcl_DString ds, *dsPtr = &ds;
 
-        Ns_DStringInit(dsPtr);
+        Tcl_DStringInit(dsPtr);
         for (j = 0u; j < Ns_SetSize(lset); ++j) {
             const char *key = Ns_SetKey(lset, j);
 
@@ -482,13 +482,13 @@ Send(Ns_Sock *sock, const struct iovec *bufs, int nbufs,
     int           nbuf;
     ssize_t       size;
     CoapParams_t *cp = sock->arg;
-    Ns_DString   *inbuf = cp->sendbuf;
+    Tcl_DString  *inbuf = cp->sendbuf;
 
     //Ns_Log(Ns_LogCoapDebug, "Send %d", sock->sock);
 
     if (inbuf == NULL) {
-        inbuf = ns_calloc(1u, sizeof(Ns_DString));
-        Ns_DStringInit(inbuf);
+        inbuf = ns_calloc(1u, sizeof(Tcl_DString));
+        Tcl_DStringInit(inbuf);
         cp->sendbuf = inbuf;
     }
 
@@ -499,7 +499,7 @@ Send(Ns_Sock *sock, const struct iovec *bufs, int nbufs,
     }
 
     Ns_Log(Ns_LogCoapDebug, "Send (%d): finished; received %ld bytes, total of %lu bytes buffered",
-           sock->sock, size, (unsigned long)Ns_DStringLength(inbuf));
+           sock->sock, size, (unsigned long)inbuf->length);
     return size;
 }
 
@@ -562,7 +562,7 @@ Close(Ns_Sock *sock)
         CoapMsg_t        coap;
         HttpRep_t        http;
         Packet_t         pin, pout;
-        Ns_DString      *sendbuf;
+        Tcl_DString     *sendbuf;
         byte             buffer[MAX_PACKET_SIZE];
         struct sockaddr *saPtr = (struct sockaddr *)&(sock->sa);
 
@@ -601,7 +601,7 @@ Close(Ns_Sock *sock)
          * Clear the send buffer, but do not free the Tcl_DString structure in
          * cp, since we might want to reuse it.
          */
-        Ns_DStringFree(sendbuf);
+        Tcl_DStringFree(sendbuf);
     }
     //sock->arg = NULL;
     Ns_Log(Ns_LogCoapDebug, "Close (%d) invalidates socket", sock->sock);
@@ -1077,30 +1077,30 @@ static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http) {
     int        opt;
     char       uutoken[17];
     size_t     uutokenLength;
-    Ns_DString rawval, *rawvalPtr = &rawval;
-    Ns_DString urlenc, *urlencPtr = &urlenc;
+    Tcl_DString rawval, *rawvalPtr = &rawval;
+    Tcl_DString urlenc, *urlencPtr = &urlenc;
 
     /*
      * Token
      *   Since the CoAP token consists of 'raw' bytes we need to encode it.
      *   UUencode is available, so let's use it.
      */
-    Ns_DStringInit(&http->token);
+    Tcl_DStringInit(&http->token);
     uutokenLength = Ns_HtuuEncode(coap->token, coap->tokenLength, uutoken);
-    Ns_DStringNAppend(&http->token, uutoken, (int)uutokenLength);
+    Tcl_DStringAppend(&http->token, uutoken, (int)uutokenLength);
 
     http->method = CoapMethodCodeToString(coap->codeValue);
 
     /* Process CoAP options */
-    Ns_DStringInit(&http->host);
-    Ns_DStringInit(&http->path);
-    Ns_DStringInit(&http->query);
+    Tcl_DStringInit(&http->host);
+    Tcl_DStringInit(&http->path);
+    Tcl_DStringInit(&http->query);
 
     for (opt = 0; opt < coap->optionCount; opt++) {
         Option_t  *optionPtr = coap->options[opt];
 
-        Ns_DStringInit(rawvalPtr);
-        Ns_DStringInit(urlencPtr);
+        Tcl_DStringInit(rawvalPtr);
+        Tcl_DStringInit(urlencPtr);
 
         /*
          * URI options:
@@ -1112,31 +1112,31 @@ static bool Coap2Http(CoapMsg_t *coap, HttpReq_t *http) {
          *   15  URI query
          */
         if (optionPtr->number & 0x3u) {
-            Ns_DStringNAppend(rawvalPtr,
+            Tcl_DStringAppend(rawvalPtr,
                               (char *)(optionPtr->value),
                               (int)optionPtr->length);
             if (optionPtr->number < 4) {
                 /* Hosts are not being transcoded from UTF-8 to %-encoding yet (method missing) */
-                Ns_DStringNAppend(&http->host, rawvalPtr->string, rawvalPtr->length);
+                Tcl_DStringAppend(&http->host, rawvalPtr->string, rawvalPtr->length);
 
             } else if (optionPtr->number < 8) {
-                Ns_DStringNAppend(&http->host, ":", 1);
-                Ns_DStringNAppend(&http->host, rawvalPtr->string, rawvalPtr->length);
+                Tcl_DStringAppend(&http->host, ":", 1);
+                Tcl_DStringAppend(&http->host, rawvalPtr->string, rawvalPtr->length);
 
             } else if (optionPtr->number < 12) {
 
                 Ns_UrlPathEncode(urlencPtr, rawvalPtr->string, UTF8_Encoding);
-                Ns_DStringNAppend(&http->path, "/", 1);
-                Ns_DStringNAppend(&http->path, urlencPtr->string, urlencPtr->length);
+                Tcl_DStringAppend(&http->path, "/", 1);
+                Tcl_DStringAppend(&http->path, urlencPtr->string, urlencPtr->length);
 
             } else if (optionPtr->number < 16) {
                 if (Tcl_DStringLength(&http->query) == 0) {
-                    Ns_DStringNAppend(&http->query, "?", 1);
+                    Tcl_DStringAppend(&http->query, "?", 1);
                 } else {
-                    Ns_DStringNAppend(&http->query, "&", 1);
+                    Tcl_DStringAppend(&http->query, "&", 1);
                 }
                 Ns_UrlPathEncode(urlencPtr, rawvalPtr->string, UTF8_Encoding);
-                Ns_DStringNAppend(&http->query, urlencPtr->string, urlencPtr->length);
+                Tcl_DStringAppend(&http->query, urlencPtr->string, urlencPtr->length);
             } else {
                 Ns_Log(Warning, "nscoap: option %d not handled", optionPtr->number);
             }
@@ -1213,10 +1213,10 @@ static bool SerializeHttp(HttpReq_t *http, Tcl_DString *dsPtr)
     Ns_DStringPrintf(dsPtr, "%s %s%s %s\r\n",
                      http->method, Ns_DStringValue(&http->path),
                      Ns_DStringValue(&http->query), HTTP_VERSION);
-    // Ns_DStringPrintf(dsPtr, "Host: %s\n", Ns_DStringValue(&(http->host)));
-    Ns_DStringPrintf(dsPtr, "Content-Length: %ld\r\n", http->payloadLength);
+    // Ns_DStringPrintf(dsPtr, "Host: %s\n", http->host.string);
+    Ns_DStringPrintf(dsPtr, "content-length: %ld\r\n", http->payloadLength);
     if (http->payloadLength > 0) {
-        Ns_DStringPrintf(dsPtr, "Content-Type: %s\r\n\r\n", http->contentType);
+        Ns_DStringPrintf(dsPtr, "content-type: %s\r\n\r\n", http->contentType);
         Tcl_DStringAppend(dsPtr, (const char *)http->payload, (int)http->payloadLength);
     } else {
         Tcl_DStringAppend(dsPtr, "\r\n", 2);
