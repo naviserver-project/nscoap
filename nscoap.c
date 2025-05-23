@@ -332,10 +332,20 @@ Recv(Ns_Sock *sock, struct iovec *bufs, int nbufs,
                     if ((strcmp(key, "nsv") != 0)
                         && coap.options[i]->delta > 0
                         ) {
-                        mapHTTP = PTR2INT(Ns_UrlSpecificGet(sock->driver->server,
+                        void *mapResult = Ns_UrlSpecificGet(
+#if NS_VERSION_NUM >= 50000
+                                                            Ns_GetServer(sock->driver->server),
+#else
+                                                            sock->driver->server,
+#endif
                                                             CoapMethodCodeToString(coap.codeValue),
                                                             key,
-                                                            coapKey));
+                                                            coapKey
+#if NS_VERSION_NUM >= 50000
+                                                            ,0u, NS_URLSPACE_FAST, NULL, NULL, NULL
+#endif
+                                                            );
+                        mapHTTP = mapResult != NULL;
                         Ns_Log(Ns_LogCoapDebug, "Recv: coap server %s: option[%lu] type %.6x <%s> mapHTTP-> %d",
                                sock->driver->server, i, coap.type, key, mapHTTP);
                     } else if (coap.options[i]->delta == 0) {
